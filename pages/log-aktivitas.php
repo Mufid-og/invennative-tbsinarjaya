@@ -153,7 +153,86 @@ ob_start();
 
                             <?php if ($detailId === (int)$row['id'] && !empty($row['data_perubahan'])): ?>
                                 <?php $data = json_decode($row['data_perubahan'], true); ?>
-                                <?php if ($data && isset($data['sesudah'])): ?>
+                                <?php if ($data && $row['modul'] === 'verifikasi-stok' && isset($data['items']) && is_array($data['items'])): ?>
+                                    <tr class="bg-[#f8fafc]">
+                                        <td colspan="6" class="px-6 py-4">
+                                            <div class="flex flex-wrap items-center gap-x-6 gap-y-1 mb-3 text-[13px]">
+                                                <div><span class="text-[#5a6a7a]">Tanggal:</span> <span class="font-medium text-[#1a2332]"><?= e($data['tanggal'] ?? '-') ?></span></div>
+                                                <div><span class="text-[#5a6a7a]">Jumlah item:</span> <span class="font-medium text-[#1a2332]"><?= count($data['items']) ?></span></div>
+                                                <?php if (!empty($data['keterangan'])): ?>
+                                                    <div><span class="text-[#5a6a7a]">Keterangan:</span> <span class="font-medium text-[#1a2332]"><?= e($data['keterangan']) ?></span></div>
+                                                <?php endif; ?>
+                                            </div>
+                                            <table class="min-w-full divide-y divide-[#dce3ed] border border-[#dce3ed] rounded-lg overflow-hidden text-[13px]">
+                                                <thead class="bg-[#f0f4f8]">
+                                                    <tr>
+                                                        <th class="px-4 py-2 text-left text-xs font-semibold text-[#5a6a7a] uppercase">Produk / Merek / Ukuran</th>
+                                                        <th class="px-4 py-2 text-right text-xs font-semibold text-[#5a6a7a] uppercase">Stok Sistem</th>
+                                                        <th class="px-4 py-2 text-right text-xs font-semibold text-[#5a6a7a] uppercase">Stok Fisik</th>
+                                                        <th class="px-4 py-2 text-right text-xs font-semibold text-[#5a6a7a] uppercase">Selisih</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="divide-y divide-[#dce3ed] bg-white">
+                                                    <?php foreach ($data['items'] as $item): ?>
+                                                        <?php $selisih = (float)($item['selisih'] ?? 0); ?>
+                                                        <tr>
+                                                            <td class="px-4 py-2 text-sm font-medium text-[#1a2332]">
+                                                                <?= e($item['produk'] ?? '-') ?><span class="text-[#5a6a7a] font-normal"> &middot; <?= e($item['merek'] ?? '-') ?> &middot; <?= e($item['ukuran'] ?? '-') ?></span>
+                                                            </td>
+                                                            <td class="px-4 py-2 text-right text-sm text-[#5a6a7a]"><?= format_number((float)($item['stok_sistem'] ?? 0), 0) ?></td>
+                                                            <td class="px-4 py-2 text-right text-sm text-[#1a2332]"><?= format_number((float)($item['stok_fisik'] ?? 0), 0) ?></td>
+                                                            <td class="px-4 py-2 text-right text-sm font-semibold <?= $selisih > 0 ? 'text-[#1a7a3a]' : ($selisih < 0 ? 'text-[#c0392b]' : 'text-[#5a6a7a]') ?>">
+                                                                <?= $selisih > 0 ? '+' : '' ?><?= format_number($selisih, 0) ?>
+                                                            </td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                </tbody>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                <?php elseif ($data && $row['modul'] === 'mutasi-stok'): ?>
+                                    <tr class="bg-[#f8fafc]">
+                                        <td colspan="6" class="px-6 py-4">
+                                            <table class="min-w-full divide-y divide-[#dce3ed] border border-[#dce3ed] rounded-lg overflow-hidden text-[13px]">
+                                                <tbody class="divide-y divide-[#dce3ed] bg-white">
+                                                    <?php
+                                                    $mutasiFields = [
+                                                        'produk' => 'Produk',
+                                                        'merek' => 'Merek',
+                                                        'ukuran' => 'Ukuran',
+                                                        'jenis' => 'Jenis',
+                                                        'qty' => 'Qty',
+                                                        'harga_modal' => 'Harga Modal',
+                                                        'harga_jual' => 'Harga Jual',
+                                                        'tanggal' => 'Tanggal',
+                                                    ];
+                                                    ?>
+                                                    <?php foreach ($mutasiFields as $mKey => $mLabel): ?>
+                                                        <?php if (!isset($data[$mKey])) continue; ?>
+                                                        <?php
+                                                        $mVal = $data[$mKey];
+                                                        if (in_array($mKey, ['harga_modal', 'harga_jual'])) {
+                                                            $mDisplay = format_rupiah($mVal);
+                                                        } elseif ($mKey === 'qty') {
+                                                            $mDisplay = format_number((float)$mVal, 0);
+                                                        } elseif ($mKey === 'jenis') {
+                                                            $mDisplay = $mVal === 'masuk' ? 'Masuk' : ($mVal === 'keluar' ? 'Keluar' : $mVal);
+                                                        } elseif ($mKey === 'tanggal') {
+                                                            $mDisplay = date('d M Y H:i', strtotime($mVal));
+                                                        } else {
+                                                            $mDisplay = $mVal;
+                                                        }
+                                                        ?>
+                                                        <tr>
+                                                            <td class="px-4 py-2 text-left text-xs font-semibold text-[#5a6a7a] uppercase w-40"><?= e($mLabel) ?></td>
+                                                            <td class="px-4 py-2 text-sm text-[#1a2332]"><?= e($mDisplay) ?></td>
+                                                        </tr>
+                                                    <?php endforeach; ?>
+                                                </tbody>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                <?php elseif ($data && isset($data['sesudah'])): ?>
                                     <tr class="bg-[#f8fafc]">
                                         <td colspan="6" class="px-6 py-4">
                                             <table class="min-w-full divide-y divide-[#dce3ed] border border-[#dce3ed] rounded-lg overflow-hidden text-[13px]">

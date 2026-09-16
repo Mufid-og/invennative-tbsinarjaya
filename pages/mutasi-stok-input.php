@@ -5,6 +5,11 @@ $activeMenu = 'mutasi-stok-input';
 $pageTitle = 'Input Mutasi Stok - Inventaris Toko Bangunan';
 
 $db = db();
+
+if (($_GET['new'] ?? '') === '1') {
+    unset($_SESSION['mutasi_jenis'], $_SESSION['mutasi_keranjang'], $_SESSION['mutasi_tanggal'], $_SESSION['mutasi_keterangan']);
+}
+
 $jenis = $_SESSION['mutasi_jenis'] ?? '';
 $step = $_GET['step'] ?? 'jenis';
 $produkId = (int)($_GET['produk_id'] ?? 0);
@@ -54,8 +59,8 @@ ob_start();
 <div class="space-y-6">
     <?php if ($flash): ?>
         <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 4000)"
-             x-transition:leave="transition ease-in duration-300" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-             class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium shadow-sm
+            x-transition:leave="transition ease-in duration-300" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+            class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium shadow-sm
                     <?= $flash['type'] === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200' ?>">
             <i class="bi <?= $flash['type'] === 'success' ? 'bi-check-circle-fill text-emerald-500' : 'bi-exclamation-circle-fill text-red-500' ?>"></i>
             <?= e($flash['message']) ?>
@@ -75,9 +80,16 @@ ob_start();
                 <?php endif; ?>
             </h1>
         </div>
-        <a href="/mutasi-stok" class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-[#dce3ed] text-[#5a6a7a] text-[13px] font-medium rounded-xl hover:bg-[#f0f4f8] transition shadow-sm">
-            <i class="bi bi-arrow-left"></i> Kembali ke Riwayat
-        </a>
+        <div class="flex flex-wrap items-center gap-2.5">
+            <?php if ($jenis): ?>
+                <a href="/mutasi-stok/input?new=1" class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-[#dce3ed] text-[#5a6a7a] text-[13px] font-medium rounded-xl hover:bg-[#f0f4f8] transition shadow-sm">
+                    <i class="bi bi-arrow-repeat"></i> Ganti Jenis
+                </a>
+            <?php endif; ?>
+            <a href="/mutasi-stok" class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-[#dce3ed] text-[#5a6a7a] text-[13px] font-medium rounded-xl hover:bg-[#f0f4f8] transition shadow-sm">
+                <i class="bi bi-arrow-left"></i> Kembali ke Riwayat
+            </a>
+        </div>
     </div>
 
     <?php if (!$jenis): ?>
@@ -119,34 +131,27 @@ ob_start();
                 <div class="bg-white rounded-xl shadow-sm border border-[#dce3ed] p-4 mb-6">
                     <div class="flex items-center gap-2 text-[13px]">
                         <?php
-                        $steps = ['jenis' => 1, 'produk' => 2, 'merek' => 3, 'ukuran' => 4];
+                        $steps = ['produk' => 1, 'merek' => 2, 'ukuran' => 3];
                         $currentStep = $steps[$step] ?? 1;
-                        $stepLabels = ['jenis' => 'Jenis', 'produk' => 'Produk', 'merek' => 'Merek', 'ukuran' => 'Ukuran'];
+                        $stepLabels = ['produk' => 'Produk', 'merek' => 'Merek', 'ukuran' => 'Ukuran'];
                         foreach ($stepLabels as $sKey => $sLabel):
                             $sNum = $steps[$sKey];
                             $isActive = $sNum === $currentStep;
                             $isDone = $sNum < $currentStep;
                         ?>
-                            <?php if ($sKey === 'jenis'): ?>
-                                <a href="/mutasi-stok/input"
-                                   class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg <?= $isActive ? 'bg-[#205295] text-white font-semibold' : ($isDone ? 'bg-emerald-100 text-emerald-700 font-medium' : 'bg-[#f0f4f8] text-[#5a6a7a]') ?>">
-                                    <?php if ($isDone): ?><i class="bi bi-check-circle-fill text-xs"></i><?php else: ?><span class="w-5 h-5 rounded-full border <?= $isActive ? 'border-white' : 'border-[#c3cbd5]' ?> flex items-center justify-center text-[11px] font-bold"><?= $sNum ?></span><?php endif; ?>
-                                    <?= $sLabel ?>
-                                </a>
-                            <?php else: ?>
-                                <span class="text-[#c3cbd5]"><i class="bi bi-chevron-right"></i></span>
-                                <?php
-                                $href = '#';
-                                if ($sKey === 'produk' && $jenis) $href = "/mutasi-stok/input?step=produk";
-                                if ($sKey === 'merek' && $produkId) $href = "/mutasi-stok/input?step=merek&produk_id={$produkId}";
-                                if ($sKey === 'ukuran' && $merekId) $href = "/mutasi-stok/input?step=ukuran&produk_id={$produkId}&merek_id={$merekId}";
-                                ?>
-                                <a href="<?= $href ?>"
-                                   class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg <?= $isActive ? 'bg-[#205295] text-white font-semibold' : ($isDone ? 'bg-emerald-100 text-emerald-700 font-medium' : 'bg-[#f0f4f8] text-[#5a6a7a]') ?>">
-                                    <?php if ($isDone): ?><i class="bi bi-check-circle-fill text-xs"></i><?php else: ?><span class="w-5 h-5 rounded-full border <?= $isActive ? 'border-white' : 'border-[#c3cbd5]' ?> flex items-center justify-center text-[11px] font-bold"><?= $sNum ?></span><?php endif; ?>
-                                    <?= $sLabel ?>
-                                </a>
-                            <?php endif; ?>
+
+                            <?php
+                            $href = '#';
+                            if ($sKey === 'produk' && $jenis) $href = "/mutasi-stok/input?step=produk";
+                            if ($sKey === 'merek' && $produkId) $href = "/mutasi-stok/input?step=merek&produk_id={$produkId}";
+                            if ($sKey === 'ukuran' && $merekId) $href = "/mutasi-stok/input?step=ukuran&produk_id={$produkId}&merek_id={$merekId}";
+                            ?>
+                            <a href="<?= $href ?>"
+                                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg <?= $isActive ? 'bg-[#205295] text-white font-semibold' : ($isDone ? 'bg-emerald-100 text-emerald-700 font-medium' : 'bg-[#f0f4f8] text-[#5a6a7a]') ?>">
+                                <?php if ($isDone): ?><i class="bi bi-check-circle-fill text-xs"></i><?php else: ?><span class="w-5 h-5 rounded-full border <?= $isActive ? 'border-white' : 'border-[#c3cbd5]' ?> flex items-center justify-center text-[11px] font-bold"><?= $sNum ?></span><?php endif; ?>
+                                <?= $sLabel ?>
+                            </a>
+                            <span class="text-[#c3cbd5]"><i class="bi bi-chevron-right"></i></span>
                         <?php endforeach; ?>
                     </div>
                 </div>
@@ -157,7 +162,7 @@ ob_start();
                         <form method="GET" action="/mutasi-stok/input" class="relative max-w-md">
                             <input type="hidden" name="step" value="produk">
                             <input type="text" name="q" value="<?= e($_GET['q'] ?? '') ?>" placeholder="Cari produk..."
-                                   class="w-full pl-10 pr-4 py-2.5 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] transition bg-[#f7faff]">
+                                class="w-full pl-10 pr-4 py-2.5 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] transition bg-[#f7faff]">
                             <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5a6a7a] text-sm"></i>
                         </form>
                     </div>
@@ -197,14 +202,14 @@ ob_start();
                         <?php endif; ?>
                     </div>
 
-                <!-- Step: Pilih Merek -->
+                    <!-- Step: Pilih Merek -->
                 <?php elseif ($step === 'merek'): ?>
                     <div class="mb-3">
                         <form method="GET" action="/mutasi-stok/input" class="relative max-w-md">
                             <input type="hidden" name="step" value="merek">
                             <input type="hidden" name="produk_id" value="<?= $produkId ?>">
                             <input type="text" name="q" value="<?= e($_GET['q'] ?? '') ?>" placeholder="Cari merek..."
-                                   class="w-full pl-10 pr-4 py-2.5 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] transition bg-[#f7faff]">
+                                class="w-full pl-10 pr-4 py-2.5 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] transition bg-[#f7faff]">
                             <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5a6a7a] text-sm"></i>
                         </form>
                     </div>
@@ -245,7 +250,7 @@ ob_start();
                         <?php endif; ?>
                     </div>
 
-                <!-- Step: Pilih Ukuran -->
+                    <!-- Step: Pilih Ukuran -->
                 <?php elseif ($step === 'ukuran'): ?>
                     <div class="mb-3">
                         <form method="GET" action="/mutasi-stok/input" class="relative max-w-md">
@@ -253,7 +258,7 @@ ob_start();
                             <input type="hidden" name="produk_id" value="<?= $produkId ?>">
                             <input type="hidden" name="merek_id" value="<?= $merekId ?>">
                             <input type="text" name="q" value="<?= e($_GET['q'] ?? '') ?>" placeholder="Cari ukuran..."
-                                   class="w-full pl-10 pr-4 py-2.5 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] transition bg-[#f7faff]">
+                                class="w-full pl-10 pr-4 py-2.5 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] transition bg-[#f7faff]">
                             <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5a6a7a] text-sm"></i>
                         </form>
                     </div>
@@ -265,7 +270,7 @@ ob_start();
                         $filteredUkuran = $ukuranList;
                     }
                     ?>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div class="flex flex-wrap gap-3">
                         <?php if (empty($filteredUkuran)): ?>
                             <div class="col-span-full py-10 text-center text-[#5a6a7a]">
                                 <i class="bi bi-inbox text-3xl block mb-2 text-[#c3cbd5]"></i>
@@ -280,7 +285,7 @@ ob_start();
                                             <i class="bi <?= $inCart ? 'bi-check-circle-fill text-emerald-600' : 'bi-rulers text-[#205295]' ?>"></i>
                                         </div>
                                         <div class="flex-1 min-w-0">
-                                            <div class="font-semibold text-[#1a2332] text-sm">Ukuran <?= e($u['ukuran']) ?></div>
+                                            <div class="font-semibold text-[#1a2332] text-sm truncate" title="Ukuran <?= e($u['ukuran']) ?>">Ukuran <?= e($u['ukuran']) ?></div>
                                             <div class="text-[11px] text-[#5a6a7a]">Stok: <?= format_number($u['stok'], 0) ?></div>
                                         </div>
                                         <?php if (!$inCart): ?>
@@ -332,20 +337,6 @@ ob_start();
                         <input type="hidden" name="action" value="simpan">
 
                         <div class="p-5 space-y-4">
-                            <!-- Tanggal -->
-                            <div>
-                                <label class="block text-[13px] font-medium text-[#5a6a7a] mb-1">Tanggal &amp; Waktu</label>
-                                <input type="datetime-local" name="tanggal" value="<?= e($tanggal) ?>"
-                                       class="w-full px-3 py-2 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] transition">
-                            </div>
-
-                            <!-- Keterangan -->
-                            <div>
-                                <label class="block text-[13px] font-medium text-[#5a6a7a] mb-1">Keterangan</label>
-                                <textarea name="keterangan" rows="2" placeholder="Catatan opsional..."
-                                          class="w-full px-3 py-2 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] transition resize-none"><?= e($keterangan) ?></textarea>
-                            </div>
-
                             <!-- Cart Items -->
                             <?php if (empty($keranjang)): ?>
                                 <div class="py-8 text-center text-[#5a6a7a]">
@@ -367,31 +358,27 @@ ob_start();
                                                     <div class="text-[13px] font-semibold text-[#1a2332] truncate"><?= e($itemDetail['produk_nama']) ?></div>
                                                     <div class="text-[11px] text-[#5a6a7a]"><?= e($itemDetail['merek']) ?> &middot; Uk. <?= e($itemDetail['ukuran']) ?> &middot; Stok: <?= format_number($itemDetail['stok'], 0) ?></div>
                                                 </div>
-                                                <form method="POST" action="/mutasi-stok/input" class="flex-shrink-0">
-                                                    <input type="hidden" name="action" value="hapus_keranjang">
-                                                    <input type="hidden" name="ukuran_id" value="<?= $ukId ?>">
-                                                    <input type="hidden" name="produk_id" value="<?= $produkId ?>">
-                                                    <input type="hidden" name="merek_id" value="<?= $merekId ?>">
-                                                    <button type="submit" class="text-[#c0392b] hover:text-red-700 transition text-sm" title="Hapus">
+                                                <div class="flex-shrink-0">
+                                                    <button type="submit" form="formHapusKeranjang_<?= $ukId ?>" class="text-[#c0392b] hover:text-red-700 transition text-sm" title="Hapus">
                                                         <i class="bi bi-x-lg"></i>
                                                     </button>
-                                                </form>
+                                                </div>
                                             </div>
                                             <div class="grid grid-cols-4 gap-2 items-end">
                                                 <div class="col-span-1">
                                                     <label class="block text-[10px] text-[#5a6a7a] mb-0.5">Qty</label>
                                                     <input type="number" name="qty_<?= $ukId ?>" value="<?= e((string)(int)$item['qty']) ?>" min="0"
-                                                           class="w-full px-2 py-1.5 text-[13px] text-center border border-[#dce3ed] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] cart-qty" data-ukid="<?= $ukId ?>">
+                                                        class="w-full px-2 py-1.5 text-[13px] text-center border border-[#dce3ed] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] cart-qty" data-ukid="<?= $ukId ?>">
                                                 </div>
                                                 <div class="col-span-3">
                                                     <label class="block text-[10px] text-[#5a6a7a] mb-0.5">Harga Modal</label>
                                                     <div class="relative">
                                                         <input type="text" inputmode="numeric" data-rupiah
-                                                               name="harga_modal_<?= $ukId ?>"
-                                                               value="<?= e(format_rupiah($item['hargaModal'])) ?>"
-                                                               class="w-full px-2 py-1.5 text-[13px] border border-[#dce3ed] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295]">
+                                                            name="harga_modal_<?= $ukId ?>"
+                                                            value="<?= e(format_rupiah($item['hargaModal'])) ?>"
+                                                            class="w-full px-2 py-1.5 text-[13px] border border-[#dce3ed] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295]">
                                                         <input type="hidden" name="harga_modal_raw_<?= $ukId ?>" data-rupiah-sync="hargaModal"
-                                                               value="<?= e((string)(int)$item['hargaModal']) ?>">
+                                                            value="<?= e((string)(int)$item['hargaModal']) ?>">
                                                     </div>
                                                 </div>
                                             </div>
@@ -399,23 +386,38 @@ ob_start();
                                                 <label class="block text-[10px] text-[#5a6a7a] mb-0.5">Harga Jual</label>
                                                 <div class="relative">
                                                     <input type="text" inputmode="numeric" data-rupiah
-                                                           name="harga_jual_<?= $ukId ?>"
-                                                           value="<?= e(format_rupiah($item['hargaJual'])) ?>"
-                                                           class="w-full px-2 py-1.5 text-[13px] border border-[#dce3ed] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295]">
+                                                        name="harga_jual_<?= $ukId ?>"
+                                                        value="<?= e(format_rupiah($item['hargaJual'])) ?>"
+                                                        class="w-full px-2 py-1.5 text-[13px] border border-[#dce3ed] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295]">
                                                     <input type="hidden" name="harga_jual_raw_<?= $ukId ?>" data-rupiah-sync="hargaJual"
-                                                           value="<?= e((string)(int)$item['hargaJual']) ?>">
+                                                        value="<?= e((string)(int)$item['hargaJual']) ?>">
                                                 </div>
                                             </div>
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
                             <?php endif; ?>
+
+                            <!-- Tanggal -->
+                            <div>
+                                <label class="block text-[13px] font-medium text-[#5a6a7a] mb-1">Tanggal &amp; Waktu</label>
+                                <input type="datetime-local" name="tanggal" value="<?= e($tanggal) ?>"
+                                    class="w-full px-3 py-2 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] transition">
+                            </div>
+
+                            <!-- Keterangan -->
+                            <div>
+                                <label class="block text-[13px] font-medium text-[#5a6a7a] mb-1">Keterangan</label>
+                                <textarea name="keterangan" rows="2" placeholder="Catatan opsional..."
+                                    class="w-full px-3 py-2 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] transition resize-none"><?= e($keterangan) ?></textarea>
+                            </div>
                         </div>
+
 
                         <?php if (!empty($keranjang)): ?>
                             <div class="px-5 pb-5">
                                 <button type="submit"
-                                        class="w-full py-3 bg-[#205295] text-white text-[14px] font-bold rounded-xl hover:bg-[#183d72] transition shadow-sm flex items-center justify-center gap-2">
+                                    class="w-full py-3 bg-[#205295] text-white text-[14px] font-bold rounded-xl hover:bg-[#183d72] transition shadow-sm flex items-center justify-center gap-2">
                                     <i class="bi bi-check-circle"></i> Simpan Mutasi Stok
                                 </button>
                             </div>
@@ -428,48 +430,50 @@ ob_start();
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    var key = 'mutasi_draft_' + <?= json_encode($jenis) ?>;
-    if (<?= json_encode($jenis) ?>) {
-        try {
-            var draft = JSON.parse(localStorage.getItem(key) || '{}');
-            if (draft.tanggal) {
-                var tglInput = document.querySelector('input[name="tanggal"]');
-                if (tglInput) tglInput.value = draft.tanggal;
-            }
-            if (draft.keterangan) {
-                var ketInput = document.querySelector('textarea[name="keterangan"]');
-                if (ketInput) ketInput.value = draft.keterangan;
-            }
-        } catch(e) {}
-    }
+    document.addEventListener('DOMContentLoaded', function() {
+        var key = 'mutasi_draft_' + <?= json_encode($jenis) ?>;
+        if (<?= json_encode($jenis) ?>) {
+            try {
+                var draft = JSON.parse(localStorage.getItem(key) || '{}');
+                if (draft.tanggal) {
+                    var tglInput = document.querySelector('input[name="tanggal"]');
+                    if (tglInput) tglInput.value = draft.tanggal;
+                }
+                if (draft.keterangan) {
+                    var ketInput = document.querySelector('textarea[name="keterangan"]');
+                    if (ketInput) ketInput.value = draft.keterangan;
+                }
+            } catch (e) {}
+        }
 
-    document.querySelectorAll('.cart-qty').forEach(function(input) {
-        input.addEventListener('change', function() {
-            var ukid = this.getAttribute('data-ukid');
-            var val = parseInt(this.value) || 0;
-            if (val < 0) this.value = 0;
-            document.querySelectorAll('.cart-qty').forEach(function(qi) {
-                qi.addEventListener('input', saveDraft);
+        document.querySelectorAll('.cart-qty').forEach(function(input) {
+            input.addEventListener('change', function() {
+                var ukid = this.getAttribute('data-ukid');
+                var val = parseInt(this.value) || 0;
+                if (val < 0) this.value = 0;
+                document.querySelectorAll('.cart-qty').forEach(function(qi) {
+                    qi.addEventListener('input', saveDraft);
+                });
             });
         });
-    });
 
-    function saveDraft() {
-        if (!<?= json_encode($jenis) ?>) return;
-        var draft = {};
-        var tgl = document.querySelector('input[name="tanggal"]');
-        var ket = document.querySelector('textarea[name="keterangan"]');
-        if (tgl) draft.tanggal = tgl.value;
-        if (ket) draft.keterangan = ket.value;
-        try { localStorage.setItem(key, JSON.stringify(draft)); } catch(e) {}
-    }
+        function saveDraft() {
+            if (!<?= json_encode($jenis) ?>) return;
+            var draft = {};
+            var tgl = document.querySelector('input[name="tanggal"]');
+            var ket = document.querySelector('textarea[name="keterangan"]');
+            if (tgl) draft.tanggal = tgl.value;
+            if (ket) draft.keterangan = ket.value;
+            try {
+                localStorage.setItem(key, JSON.stringify(draft));
+            } catch (e) {}
+        }
 
-    document.querySelectorAll('input[name="tanggal"], textarea[name="keterangan"]').forEach(function(el) {
-        el.addEventListener('input', saveDraft);
-        el.addEventListener('change', saveDraft);
+        document.querySelectorAll('input[name="tanggal"], textarea[name="keterangan"]').forEach(function(el) {
+            el.addEventListener('input', saveDraft);
+            el.addEventListener('change', saveDraft);
+        });
     });
-});
 </script>
 <?php
 $content = ob_get_clean();

@@ -139,9 +139,9 @@ switch ($action) {
         $validatedItems = [];
 
         foreach ($keranjang as $ukId => $item) {
-            $qty = (int)($item['qty'] ?? 0);
-            $hargaModal = (float)($item['hargaModal'] ?? 0);
-            $hargaJual = (float)($item['hargaJual'] ?? 0);
+            $qty = (int)($_POST['qty_' . $ukId] ?? $item['qty'] ?? 0);
+            $hargaModal = (float)($_POST['harga_modal_raw_' . $ukId] ?? $item['hargaModal'] ?? 0);
+            $hargaJual = (float)($_POST['harga_jual_raw_' . $ukId] ?? $item['hargaJual'] ?? 0);
 
             if ($qty <= 0) {
                 set_flash('error', 'Qty harus lebih dari 0 untuk setiap item.');
@@ -202,7 +202,9 @@ switch ($action) {
 
                 $namaLengkap = $ukuran['produk_nama'] . ' ' . $ukuran['merek'] . ' ' . $ukuran['ukuran'];
                 log_aktivitas('CREATE', 'mutasi-stok', $mutasiId, 'Mutasi stok ' . $jenis . ': ' . $namaLengkap . ' x' . $qty, [
-                    'id_ukuran' => $ukId,
+                    'produk' => $ukuran['produk_nama'],
+                    'merek' => $ukuran['merek'],
+                    'ukuran' => $ukuran['ukuran'],
                     'jenis' => $jenis,
                     'qty' => $qty,
                     'harga_modal' => $hargaModal,

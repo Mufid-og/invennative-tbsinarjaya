@@ -127,9 +127,10 @@ if ($action === 'simpan') {
 
     try {
         $db->beginTransaction();
+        $detailItems = [];
 
         foreach ($keranjang as $ukuranId => $cartItem) {
-            $stmt = $db->prepare('SELECT * FROM ukuran WHERE id = ? AND deleted_at IS NULL');
+            $stmt = $db->prepare('SELECT u.*, m.merek, p.nama as produk_nama FROM ukuran u JOIN merek m ON m.id = u.id_merek JOIN produk p ON p.id = m.id_produk WHERE u.id = ? AND u.deleted_at IS NULL');
             $stmt->execute([$ukuranId]);
             $ukuran = $stmt->fetch(PDO::FETCH_ASSOC);
             if (!$ukuran) {
@@ -146,11 +147,24 @@ if ($action === 'simpan') {
 
             $update = $db->prepare('UPDATE ukuran SET stok = ?, updated_at = ? WHERE id = ?');
             $update->execute([$stokFisik, $ts, $ukuranId]);
+
+            $detailItems[] = [
+                'produk' => $ukuran['produk_nama'],
+                'merek' => $ukuran['merek'],
+                'ukuran' => $ukuran['ukuran'],
+                'stok_sistem' => $stokSistem,
+                'stok_fisik' => $stokFisik,
+                'selisih' => $selisih,
+            ];
         }
 
         $db->commit();
 
-        log_aktivitas('CREATE', 'verifikasi-stok', null, "Verifikasi stok {$tanggal} sebanyak " . count($keranjang) . ' item');
+        log_aktivitas('CREATE', 'verifikasi-stok', null, "Verifikasi stok {$tanggal} sebanyak " . count($keranjang) . ' item', [
+            'tanggal' => $tanggal,
+            'keterangan' => $keterangan,
+            'items' => $detailItems,
+        ]);
 
         $_SESSION['verifikasi_keranjang'] = [];
         unset($_SESSION['verifikasi_tanggal'], $_SESSION['verifikasi_keterangan']);

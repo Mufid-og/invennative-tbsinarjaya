@@ -105,10 +105,6 @@ ob_start();
             <p class="text-[13px] text-[#5a6a7a] mt-0.5">Seluruh catatan verifikasi fisik stok</p>
         </div>
         <div class="flex items-center gap-2.5">
-            <button onclick="window.openModalCetakVerifikasi()" type="button"
-                    class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-[#dce3ed] text-[#5a6a7a] text-[13px] font-medium rounded-xl hover:bg-[#f0f4f8] transition shadow-sm">
-                <i class="bi bi-printer"></i> Cetak Laporan
-            </button>
             <a href="/verifikasi-stok/input"
                class="inline-flex items-center gap-2 px-4 py-2.5 bg-[#205295] text-white text-[13px] font-semibold rounded-xl hover:bg-[#183d72] transition shadow-sm">
                 <i class="bi bi-plus-lg"></i> Input Verifikasi Stok

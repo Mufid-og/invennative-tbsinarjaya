@@ -107,7 +107,7 @@ ob_start();
                     class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-[#dce3ed] text-[#5a6a7a] text-[13px] font-medium rounded-xl hover:bg-[#f0f4f8] transition shadow-sm">
                 <i class="bi bi-printer"></i> Cetak Laporan
             </button>
-            <a href="/mutasi-stok/input"
+            <a href="/mutasi-stok/input?new=1"
                class="inline-flex items-center gap-2 px-4 py-2.5 bg-[#205295] text-white text-[13px] font-semibold rounded-xl hover:bg-[#183d72] transition shadow-sm">
                 <i class="bi bi-plus-lg"></i> Input Mutasi Stok
             </a>
@@ -204,17 +204,23 @@ ob_start();
 
 <script>
 window.openModalCetakMutasi = function() {
+    var now = new Date();
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    var dari = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-01';
+    var lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    var sampai = lastDay.getFullYear() + '-' + pad(lastDay.getMonth() + 1) + '-' + pad(lastDay.getDate());
+
     Swal.fire({
         title: 'Cetak Laporan Mutasi',
         html: `
             <div class="text-left space-y-3">
                 <div>
                     <label class="block text-[13px] font-medium text-[#5a6a7a] mb-1">Dari Tanggal</label>
-                    <input type="date" id="cetak-dari" class="w-full px-3 py-2 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295]">
+                    <input type="date" id="cetak-dari" value="${dari}" class="w-full px-3 py-2 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295]">
                 </div>
                 <div>
                     <label class="block text-[13px] font-medium text-[#5a6a7a] mb-1">Sampai Tanggal</label>
-                    <input type="date" id="cetak-sampai" class="w-full px-3 py-2 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295]">
+                    <input type="date" id="cetak-sampai" value="${sampai}" class="w-full px-3 py-2 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295]">
                 </div>
             </div>
         `,
