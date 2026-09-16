@@ -175,16 +175,16 @@ ob_start();
                                                class="px-3 py-1.5 rounded-lg border border-[#c9cbd3] text-[#5a6a7a] hover:text-[#2c74b3] hover:border-[#2c74b3] text-xs transition">
                                                 <i class="bi bi-pencil"></i>
                                             </a>
-                                            <button type="button"
-                                                    data-confirm-title="Hapus Produk"
-                                                    data-confirm-text="<?= e($produk['nama']) ?> akan dihapus beserta merek &amp; ukurannya. Lanjutkan?"
-                                                    onclick="hapusKonfirmasi(this)"
-                                                    class="px-3 py-1.5 rounded-lg border border-[#c9cbd3] text-[#5a6a7a] hover:text-[#c0392b] hover:border-[#c0392b] text-xs transition">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                            <form method="POST" action="/produk" class="hidden" onsubmit="return confirm('Hapus produk ini?')">
+                                            <form method="POST" action="/produk">
                                                 <input type="hidden" name="action" value="hapus_produk">
                                                 <input type="hidden" name="id" value="<?= $produk['id'] ?>">
+                                                <button type="button"
+                                                        data-confirm-title="Hapus Produk"
+                                                        data-confirm-text="<?= e($produk['nama']) ?> akan dihapus beserta merek &amp; ukurannya. Lanjutkan?"
+                                                        onclick="hapusKonfirmasi(this)"
+                                                        class="px-3 py-1.5 rounded-lg border border-[#c9cbd3] text-[#5a6a7a] hover:text-[#c0392b] hover:border-[#c0392b] text-xs transition">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
                                             </form>
                                         </div>
                                     </td>
@@ -272,14 +272,17 @@ ob_start();
                                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#c9cbd3] text-[#5a6a7a] hover:text-[#2c74b3] hover:border-[#2c74b3] text-xs transition">
                                                 <i class="bi bi-pencil"></i> Edit
                                             </a>
-                                            <button type="button"
-                                                    data-confirm-title="Hapus Merek"
-                                                    data-confirm-text="<?= e($merek['merek']) ?> akan dihapus beserta ukurannya. Lanjutkan?"
-                                                    onclick="hapusKonfirmasi(this)"
-                                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#c9cbd3] text-[#5a6a7a] hover:text-[#c0392b] hover:border-[#c0392b] text-xs transition">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                            <form method="POST" action="/produk" class="hidden"><input type="hidden" name="action" value="hapus_merek"><input type="hidden" name="id" value="<?= $merek['id'] ?>"></form>
+                                            <form method="POST" action="/produk">
+                                                <input type="hidden" name="action" value="hapus_merek">
+                                                <input type="hidden" name="id" value="<?= $merek['id'] ?>">
+                                                <button type="button"
+                                                        data-confirm-title="Hapus Merek"
+                                                        data-confirm-text="<?= e($merek['merek']) ?> akan dihapus beserta ukurannya. Lanjutkan?"
+                                                        onclick="hapusKonfirmasi(this)"
+                                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#c9cbd3] text-[#5a6a7a] hover:text-[#c0392b] hover:border-[#c0392b] text-xs transition">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
                                         </div>
                                     </td>
                                 </tr>
@@ -372,14 +375,19 @@ ob_start();
                                                class="px-3 py-1.5 rounded-lg border border-[#c9cbd3] text-[#5a6a7a] hover:text-[#2c74b3] hover:border-[#2c74b3] text-xs transition">
                                                 <i class="bi bi-pencil"></i>
                                             </a>
-                                            <button type="button"
-                                                data-confirm-title="Hapus Ukuran"
-                                                data-confirm-text="<?= e($ukuran['ukuran']) ?> akan dihapus. Lanjutkan?"
-                                                onclick="hapusKonfirmasi(this)"
-                                                class="px-3 py-1.5 rounded-lg border border-[#c9cbd3] text-[#5a6a7a] hover:text-[#c0392b] hover:border-[#c0392b] text-xs transition">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                            <form method="POST" action="/produk" class="hidden"><input type="hidden" name="action" value="hapus_ukuran"><input type="hidden" name="id" value="<?= $ukuran['id'] ?>"></form>
+                                            <form method="POST" action="/produk">
+                                                <input type="hidden" name="action" value="hapus_ukuran">
+                                                <input type="hidden" name="id" value="<?= $ukuran['id'] ?>">
+                                                <input type="hidden" name="search" value="<?= e($search) ?>">
+                                                <input type="hidden" name="page" value="<?= (int)$pagination['page'] ?>">
+                                                <button type="button"
+                                                    data-confirm-title="Hapus Ukuran"
+                                                    data-confirm-text="<?= e($ukuran['ukuran']) ?> akan dihapus. Lanjutkan?"
+                                                    onclick="hapusKonfirmasi(this)"
+                                                    class="px-3 py-1.5 rounded-lg border border-[#c9cbd3] text-[#5a6a7a] hover:text-[#c0392b] hover:border-[#c0392b] text-xs transition">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
                                         </div>
                                     </td>
                                 </tr>
@@ -406,6 +414,15 @@ ob_start();
     ?>
 
     <?php if ($modal === 'produk'): ?>
+    <?php
+        $editProduk = null;
+        if ($editId > 0) {
+            $stmt = $db->prepare('SELECT * FROM produk WHERE id = ? AND deleted_at IS NULL');
+            $stmt->execute([$editId]);
+            $editProduk = $stmt->fetch(PDO::FETCH_ASSOC);
+        }
+        $namaProdukVal = $editProduk['nama'] ?? ($old['nama'] ?? '');
+    ?>
     <div class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
             <div class="px-6 py-4 border-b border-[#dce3ed] flex items-center justify-between">
@@ -417,7 +434,7 @@ ob_start();
                 <input type="hidden" name="edit_id" value="<?= $editId ?>">
                 <div>
                     <label class="block text-sm font-medium text-[#1a2332] mb-1.5">Nama Produk</label>
-                    <input type="text" name="nama" value="<?= e($old['nama'] ?? '') ?>" class="w-full px-4 py-2.5 border <?= isset($errors['nama']) ? 'border-red-400' : 'border-[#c9cbd3]' ?> rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2c74b3]">
+                    <input type="text" name="nama" value="<?= e($namaProdukVal) ?>" class="w-full px-4 py-2.5 border <?= isset($errors['nama']) ? 'border-red-400' : 'border-[#c9cbd3]' ?> rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2c74b3]">
                     <?php if (isset($errors['nama'])): ?><p class="mt-1 text-xs text-[#c0392b]"><?= e($errors['nama']) ?></p><?php endif; ?>
                 </div>
                 <div class="flex justify-end gap-2">
@@ -430,6 +447,15 @@ ob_start();
     <?php endif; ?>
 
     <?php if ($modal === 'merek'): ?>
+    <?php
+        $editMerek = null;
+        if ($editId > 0) {
+            $stmt = $db->prepare('SELECT * FROM merek WHERE id = ? AND deleted_at IS NULL');
+            $stmt->execute([$editId]);
+            $editMerek = $stmt->fetch(PDO::FETCH_ASSOC);
+        }
+        $namaMerekVal = $editMerek['merek'] ?? ($old['nama'] ?? '');
+    ?>
     <div class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
             <div class="px-6 py-4 border-b border-[#dce3ed] flex items-center justify-between">
@@ -442,7 +468,7 @@ ob_start();
                 <input type="hidden" name="id_produk" value="<?= $selectedProdukId ?>">
                 <div>
                     <label class="block text-sm font-medium text-[#1a2332] mb-1.5">Nama Merek</label>
-                    <input type="text" name="nama" value="<?= e($old['nama'] ?? '') ?>" placeholder="mis: Avian" class="w-full px-4 py-2.5 border <?= isset($errors['nama']) ? 'border-red-400' : 'border-[#c9cbd3]' ?> rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2c74b3]">
+                    <input type="text" name="nama" value="<?= e($namaMerekVal) ?>" placeholder="mis: Avian" class="w-full px-4 py-2.5 border <?= isset($errors['nama']) ? 'border-red-400' : 'border-[#c9cbd3]' ?> rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2c74b3]">
                     <?php if (isset($errors['nama'])): ?><p class="mt-1 text-xs text-[#c0392b]"><?= e($errors['nama']) ?></p><?php endif; ?>
                 </div>
                 <div class="flex justify-end gap-2">
@@ -477,6 +503,8 @@ ob_start();
                 <input type="hidden" name="action" value="simpan_ukuran">
                 <input type="hidden" name="edit_id" value="<?= $editId ?>">
                 <input type="hidden" name="id_merek" value="<?= $selectedMerekId ?>">
+                <input type="hidden" name="search" value="<?= e($search) ?>">
+                <input type="hidden" name="page" value="<?= (int)($_GET['page'] ?? 1) ?>">
                 <div>
                     <label class="block text-sm font-medium text-[#1a2332] mb-1.5">Ukuran</label>
                     <input type="text" name="ukuran" value="<?= e($namaUkuranVal) ?>" placeholder="mis: 1 liter, 200 ml" class="w-full px-4 py-2.5 border <?= isset($errors['ukuran']) ? 'border-red-400' : 'border-[#c9cbd3]' ?> rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2c74b3]">

@@ -12,13 +12,21 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $action = $_POST['action'] ?? '';
 $db = db();
 
-function produk_url(?int $produkId = null, ?int $merekId = null, string $search = ''): string
+function produk_url(?int $produkId = null, ?int $merekId = null, string $search = '', int $page = 0): string
 {
     $q = [];
     if ($produkId) $q['produk'] = $produkId;
     if ($merekId) $q['merek'] = $merekId;
     if ($search !== '') $q['search'] = $search;
+    if ($page > 0) $q['page'] = $page;
     return '/produk' . ($q ? '?' . http_build_query($q) : '');
+}
+
+function merek_produk_id(int $idMerek): int
+{
+    $stmt = db()->prepare('SELECT id_produk FROM merek WHERE id = ? AND deleted_at IS NULL');
+    $stmt->execute([$idMerek]);
+    return (int)$stmt->fetchColumn();
 }
 
 function produk_require_nama(string $field = 'nama', array &$errors = []): void
@@ -34,14 +42,14 @@ $errors = [];
 
 switch ($action) {
     case 'simpan_produk':
+        $editId = (int)($_POST['edit_id'] ?? 0);
         produk_require_nama('nama', $errors);
         if ($errors) {
             $_SESSION['form_errors'] = $errors;
             $_SESSION['form_old'] = ['nama' => $_POST['nama'] ?? ''];
-            redirect('/produk?modal=produk');
+            redirect('/produk?modal=produk' . ($editId ? '&edit_id=' . $editId : ''));
         }
         $nama = trim($_POST['nama']);
-        $editId = (int)($_POST['edit_id'] ?? 0);
         $ts = now();
 
         if ($editId > 0) {
@@ -104,7 +112,7 @@ switch ($action) {
         $nama = trim($_POST['nama'] ?? '');
         if ($nama === '') {
             $_SESSION['form_errors'] = ['nama' => 'Nama wajib diisi.'];
-            redirect('/produk?produk=' . $idProduk . '&modal=merek');
+            redirect('/produk?produk=' . $idProduk . '&modal=merek' . ($editId ? '&edit_id=' . $editId : ''));
         }
         $ts = now();
 
@@ -173,7 +181,7 @@ switch ($action) {
         if ($errors) {
             $_SESSION['form_errors'] = $errors;
             $_SESSION['form_old'] = ['ukuran' => $namaUkuran, 'stok' => (string)$stok, 'harga_modal' => (string)(int)$hargaModal, 'harga_jual' => (string)(int)$hargaJual];
-            redirect(produk_url(null, $idMerek) . '&modal=ukuran');
+            redirect(produk_url(merek_produk_id($idMerek), $idMerek, get_input('search'), (int)($_POST['page'] ?? 0)) . '&modal=ukuran' . ($editId ? '&edit_id=' . $editId : ''));
         }
 
         $ts = now();
@@ -198,7 +206,7 @@ switch ($action) {
             log_aktivitas('CREATE', 'ukuran', $newId, "Ukuran baru \"{$namaUkuran}\" ditambahkan", ['sebelum' => [], 'sesudah' => ['ukuran' => $namaUkuran, 'stok' => $stok, 'harga_modal' => $hargaModal, 'harga_jual' => $hargaJual]]);
             set_flash('success', 'Data ukuran berhasil ditambahkan.');
         }
-        redirect(produk_url(null, $idMerek));
+        redirect(produk_url(merek_produk_id($idMerek), $idMerek, get_input('search'), (int)($_POST['page'] ?? 0)));
 
     case 'hapus_ukuran':
         $ukuranId = (int)($_POST['id'] ?? 0);
@@ -213,7 +221,7 @@ switch ($action) {
         $db->prepare('UPDATE ukuran SET deleted_at = ?, updated_at = ? WHERE id = ?')->execute([$ts, $ts, $ukuranId]);
         log_aktivitas('DELETE', 'ukuran', $ukuranId, "Ukuran \"{$ukuran['ukuran']}\" dihapus", null);
         set_flash('success', 'Data ukuran berhasil dihapus.');
-        redirect(produk_url(null, (int)$ukuran['id_merek']));
+        redirect(produk_url(merek_produk_id((int)$ukuran['id_merek']), (int)$ukuran['id_merek'], get_input('search'), (int)($_POST['page'] ?? 0)));
 
     default:
         set_flash('error', 'Aksi tidak dikenali.');
