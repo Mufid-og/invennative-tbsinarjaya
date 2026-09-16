@@ -7,6 +7,8 @@ require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/helpers.php';
 require_once __DIR__ . '/includes/middleware.php';
 
+date_default_timezone_set('Asia/Jakarta');
+
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $uri = rtrim($uri, '/') ?: '/';
 $method = $_SERVER['REQUEST_METHOD'];
@@ -16,6 +18,7 @@ if (str_starts_with($uri, '/assets/') || str_starts_with($uri, '/favicon')) {
 }
 
 $routes = [
+    'GET /'                               => ['action' => 'middleware',    'auth' => 'guest'],
     'GET /login'                          => ['page' => 'login',           'auth' => 'guest'],
     'POST /login'                         => ['action' => 'auth',          'auth' => 'guest'],
     'GET /logout'                         => ['action' => 'auth',          'auth' => 'auth', 'do' => 'logout'],
@@ -50,10 +53,17 @@ if (!isset($routes[$routeKey])) {
 
 $route = $routes[$routeKey];
 
+// var_dump($route);
+// return;
+
 if (($route['auth'] ?? '') === 'auth') {
     middleware_auth();
 } elseif (($route['auth'] ?? '') === 'guest') {
     middleware_guest();
+}
+
+if (isset($route['do'])) {
+    $_GET['do'] = $route['do'];
 }
 
 if (isset($route['action'])) {
@@ -65,10 +75,6 @@ if (isset($route['action'])) {
     }
     require $actionFile;
     exit;
-}
-
-if (isset($route['do'])) {
-    $_GET['do'] = $route['do'];
 }
 
 if (isset($route['api'])) {

@@ -100,6 +100,19 @@ ob_start();
                 <p class="text-[13px] text-[#5a6a7a] mt-2">Belum ada backup yang tercatat.</p>
             <?php endif; ?>
         </div>
+        
+        <div class="bg-white rounded-xl shadow-sm border border-[#dce3ed] p-6">
+            <h3 class="text-[15px] font-semibold mb-1"><i class="bi bi-upload text-[#205295]"></i> Restore Database</h3>
+            <p class="text-[13px] text-[#5a6a7a] mb-5">Pulihkan database dari file backup (.sqlite/.db). Database saat ini akan ditimpa, pastikan file backup valid.</p>
+            <form method="POST" action="/backup-database" enctype="multipart/form-data">
+                <input type="file" name="file_restore" accept=".sqlite,.db" required
+                    class="block w-full text-sm text-[#5a6a7a] file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#eef3fb] file:text-[#205295] hover:file:bg-[#dfe9f6]">
+                <button type="button" onclick="konfirmasiRestore(this)"
+                    class="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#c0392b] text-white text-sm font-semibold hover:bg-[#a93226] transition">
+                    <i class="bi bi-arrow-repeat"></i> Restore Database
+                </button>
+            </form>
+        </div>
 
         <div class="bg-white rounded-xl shadow-sm border border-[#dce3ed] p-6">
             <h3 class="text-[15px] font-semibold mb-4"><i class="bi bi-info-circle text-[#205295]"></i> Informasi Database</h3>
@@ -121,19 +134,6 @@ ob_start();
                     <dd class="font-medium"><?= $mtime ? e(format_tanggal_indo(date('Y-m-d H:i:s', $mtime))) : '-' ?></dd>
                 </div>
             </dl>
-        </div>
-
-        <div class="bg-white rounded-xl shadow-sm border border-[#dce3ed] p-6">
-            <h3 class="text-[15px] font-semibold mb-1"><i class="bi bi-upload text-[#205295]"></i> Restore Database</h3>
-            <p class="text-[13px] text-[#5a6a7a] mb-5">Pulihkan database dari file backup (.sqlite/.db). Database saat ini akan ditimpa, pastikan file backup valid.</p>
-            <form method="POST" action="/backup-database" enctype="multipart/form-data">
-                <input type="file" name="file_restore" accept=".sqlite,.db" required
-                    class="block w-full text-sm text-[#5a6a7a] file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#eef3fb] file:text-[#205295] hover:file:bg-[#dfe9f6]">
-                <button type="button" onclick="konfirmasiRestore(this)"
-                    class="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#c0392b] text-white text-sm font-semibold hover:bg-[#a93226] transition">
-                    <i class="bi bi-arrow-repeat"></i> Restore Database
-                </button>
-            </form>
         </div>
 
     </div>

@@ -1,4 +1,5 @@
 <?php
+
 // actions/auth.php
 $action = $_GET['do'] ?? $_POST['do'] ?? 'login';
 
