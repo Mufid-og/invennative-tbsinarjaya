@@ -38,8 +38,8 @@ $routes = [
     'GET /log-aktivitas'                  => ['page' => 'log-aktivitas',   'auth' => 'auth'],
     'GET /cetak-mutasi'                   => ['page' => 'cetak-mutasi',    'auth' => 'auth'],
     'GET /cetak-log'                      => ['page' => 'cetak-log',       'auth' => 'auth'],
-    'GET /backup-database'                => ['page' => 'backup-database', 'auth' => 'auth'],
-    'POST /backup-database'               => ['action' => 'backup',        'auth' => 'auth'],
+    'GET /setting'                        => ['page' => 'setting',         'auth' => 'auth'],
+    'POST /setting'                       => ['action' => 'setting',       'auth' => 'auth'],
     'GET /api/produk-cascade'             => ['api' => 'produk-cascade', 'auth' => 'auth'],
 ];
 

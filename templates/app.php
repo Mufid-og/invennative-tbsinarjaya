@@ -102,10 +102,10 @@ $fullUri = $_SERVER['REQUEST_URI'];
                 <i class="bi bi-clock-history text-lg w-5 text-center"></i> Log Aktivitas
             </a>
 
-            <a href="/backup-database"
-                class="flex items-center gap-3 px-4 py-3 rounded-lg mb-0.5 text-sm font-medium transition text-white/65 hover:bg-white/[0.08] hover:text-white <?= $activeMenu === 'backup' ? 'bg-white/[0.12] text-white shadow-[inset_3px_0_0_#a8d0f0]' : '' ?>"
+            <a href="/setting"
+                class="flex items-center gap-3 px-4 py-3 rounded-lg mb-0.5 text-sm font-medium transition text-white/65 hover:bg-white/[0.08] hover:text-white <?= $activeMenu === 'setting' ? 'bg-white/[0.12] text-white shadow-[inset_3px_0_0_#a8d0f0]' : '' ?>"
                 style="margin-bottom:2px">
-                <i class="bi bi-database-down text-lg w-5 text-center"></i> Backup Database
+                <i class="bi bi-gear text-lg w-5 text-center"></i> Setting
             </a>
         </nav>
 

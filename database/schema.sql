@@ -95,3 +95,48 @@ CREATE INDEX IF NOT EXISTS idx_verifikasi_stok_id_ukuran ON verifikasi_stok(id_u
 CREATE INDEX IF NOT EXISTS idx_verifikasi_stok_id_user ON verifikasi_stok(id_user);
 CREATE INDEX IF NOT EXISTS idx_log_aktivitas_modul ON log_aktivitas(modul);
 CREATE INDEX IF NOT EXISTS idx_log_aktivitas_id_referensi ON log_aktivitas(id_referensi);
+
+-- ===== Index kolom yang sering di-WHERE / ORDER BY / JOIN (tanpa index) =====
+
+-- Login: WHERE username = ? AND deleted_at IS NULL (actions/auth.php:28, actions/user.php:33)
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username, deleted_at);
+
+-- Pencarian & ORDER BY nama (pages/manajemen-user.php)
+CREATE INDEX IF NOT EXISTS idx_users_nama ON users(nama);
+
+-- ORDER BY nama + LIKE 'prefix%' (pages/produk.php, pages/verifikasi-stok-input.php)
+CREATE INDEX IF NOT EXISTS idx_produk_nama ON produk(nama);
+
+-- ORDER BY merek + LIKE 'prefix%' (pages/produk.php:209)
+CREATE INDEX IF NOT EXISTS idx_merek_merek ON merek(merek);
+
+-- ORDER BY ukuran + LIKE 'prefix%' (pages/produk.php:306)
+CREATE INDEX IF NOT EXISTS idx_ukuran_ukuran ON ukuran(ukuran);
+
+-- Dashboard stok menipis/habis: WHERE stok <= 5 (pages/dashboard.php:12,57)
+CREATE INDEX IF NOT EXISTS idx_ukuran_stok ON ukuran(stok);
+
+-- ORDER BY tanggal DESC, id DESC + range tanggal (pages/mutasi-stok.php, pages/cetak-mutasi.php)
+CREATE INDEX IF NOT EXISTS idx_mutasi_stok_tanggal_id ON mutasi_stok(tanggal DESC, id DESC);
+
+-- Filter/grup jenis (pages/dashboard.php)
+CREATE INDEX IF NOT EXISTS idx_mutasi_stok_jenis ON mutasi_stok(jenis);
+
+-- ORDER BY tanggal DESC, id DESC + range tanggal (pages/verifikasi-stok.php, cetak)
+CREATE INDEX IF NOT EXISTS idx_verifikasi_stok_tanggal_id ON verifikasi_stok(tanggal DESC, id DESC);
+
+-- ORDER BY created_at DESC, id DESC (pages/log-aktivitas.php, pages/cetak-log.php)
+CREATE INDEX IF NOT EXISTS idx_log_aktivitas_created_id ON log_aktivitas(created_at DESC, id DESC);
+
+-- Pencarian aksi (pages/log-aktivitas.php)
+CREATE INDEX IF NOT EXISTS idx_log_aktivitas_aksi ON log_aktivitas(aksi);
+
+-- Pencarian deskripsi LIKE 'prefix%' (pages/log-aktivitas.php)
+CREATE INDEX IF NOT EXISTS idx_log_aktivitas_deskripsi ON log_aktivitas(deskripsi);
+
+-- Join log_aktivitas -> users (pages/log-aktivitas.php, pages/cetak-log.php)
+CREATE INDEX IF NOT EXISTS idx_log_aktivitas_id_user ON log_aktivitas(id_user);
+
+-- KETERBATASAN: filter date(created_at) di pages/cetak-log.php adalah fungsi pada
+-- kolom. Expression index date()-nya sengaja tdk dibuat (DB tak terbaca SQLite lawas).
+-- Fix sejati: rewrite ke range predicate (created_at >= ? AND created_at < ?).
