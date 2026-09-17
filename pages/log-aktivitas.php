@@ -140,7 +140,12 @@ ob_start();
                                 <td class="px-6 py-3.5 text-[#1a2332] max-w-[260px] truncate" title="<?= e($row['deskripsi']) ?>"><?= e($row['deskripsi']) ?></td>
                                 <td class="px-6 py-3.5 text-right">
                                     <?php if (!empty($row['data_perubahan'])): ?>
-                                        <a href="/log-aktivitas<?= $search !== '' ? '?search=' . urlencode($search) . '&detail_id=' . $row['id'] : '?detail_id=' . $row['id'] ?>"
+                                        <?php
+                                        $logHref = '/log-aktivitas';
+                                        if ($search !== '') $logHref .= '?search=' . urlencode($search);
+                                        if ($detailId !== (int)$row['id']) $logHref .= ($search !== '' ? '&' : '?') . 'detail_id=' . (int)$row['id'];
+                                        ?>
+                                        <a href="<?= $logHref ?>"
                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#c9cbd3] text-[#5a6a7a] hover:text-[#2c74b3] hover:border-[#2c74b3] text-xs transition">
                                             <i class="bi <?= $detailId === (int)$row['id'] ? 'bi-chevron-up' : 'bi-chevron-down' ?>"></i>
                                             <?= $detailId === (int)$row['id'] ? 'Tutup' : 'Lihat' ?>
@@ -154,7 +159,7 @@ ob_start();
                             <?php if ($detailId === (int)$row['id'] && !empty($row['data_perubahan'])): ?>
                                 <?php $data = json_decode($row['data_perubahan'], true); ?>
                                 <?php if ($data && $row['modul'] === 'verifikasi-stok' && isset($data['items']) && is_array($data['items'])): ?>
-                                    <tr class="bg-[#f8fafc]">
+                                    <tr class="bg-[#f8fafc] scroll-mt-24" id="detail-<?= (int)$row['id'] ?>">
                                         <td colspan="6" class="px-6 py-4">
                                             <div class="flex flex-wrap items-center gap-x-6 gap-y-1 mb-3 text-[13px]">
                                                 <div><span class="text-[#5a6a7a]">Tanggal:</span> <span class="font-medium text-[#1a2332]"><?= e($data['tanggal'] ?? '-') ?></span></div>
@@ -191,7 +196,7 @@ ob_start();
                                         </td>
                                     </tr>
                                 <?php elseif ($data && $row['modul'] === 'mutasi-stok'): ?>
-                                    <tr class="bg-[#f8fafc]">
+                                    <tr class="bg-[#f8fafc] scroll-mt-24" id="detail-<?= (int)$row['id'] ?>">
                                         <td colspan="6" class="px-6 py-4">
                                             <table class="min-w-full divide-y divide-[#dce3ed] border border-[#dce3ed] rounded-lg overflow-hidden text-[13px]">
                                                 <tbody class="divide-y divide-[#dce3ed] bg-white">
@@ -233,7 +238,7 @@ ob_start();
                                         </td>
                                     </tr>
                                 <?php elseif ($data && isset($data['sesudah'])): ?>
-                                    <tr class="bg-[#f8fafc]">
+                                    <tr class="bg-[#f8fafc] scroll-mt-24" id="detail-<?= (int)$row['id'] ?>">
                                         <td colspan="6" class="px-6 py-4">
                                             <table class="min-w-full divide-y divide-[#dce3ed] border border-[#dce3ed] rounded-lg overflow-hidden text-[13px]">
                                                 <thead class="bg-[#f0f4f8]">
@@ -314,6 +319,14 @@ window.openModalCetakLog = function() {
         },
     });
 };
+
+document.addEventListener('DOMContentLoaded', function () {
+    var detailId = <?= $detailId !== null ? (int)$detailId : 'null' ?>;
+    if (detailId) {
+        var el = document.getElementById('detail-' + detailId);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+});
 </script>
 <?php
 $content = ob_get_clean();
