@@ -102,10 +102,6 @@ ob_start();
     <?php endif; ?>
 
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-            <h1 class="text-xl font-bold text-[#1a2332]"><i class="bi bi-clipboard-check text-[#205295]"></i> Riwayat Verifikasi Stok</h1>
-            <p class="text-[13px] text-[#5a6a7a] mt-0.5">Seluruh catatan verifikasi fisik stok</p>
-        </div>
         <div class="flex items-center gap-2.5">
             <a href="/verifikasi-stok/input"
                class="inline-flex items-center gap-2 px-4 py-2.5 bg-[#205295] text-white text-[13px] font-semibold rounded-xl hover:bg-[#183d72] transition shadow-sm">
@@ -116,7 +112,7 @@ ob_start();
 
     <div class="bg-white rounded-xl shadow-sm border border-[#dce3ed] overflow-hidden">
         <div class="px-6 py-4 border-b border-[#dce3ed]">
-            <form method="GET" action="/verifikasi-stok" class="relative">
+            <form method="GET" action="/verifikasi-stok" class="relative flex">
                 <input type="text" name="search" value="<?= e($search) ?>"
                        placeholder="Cari produk / merek / ukuran / tanggal"
                        minlength="2"
@@ -128,8 +124,8 @@ ob_start();
                         <i class="bi bi-x-circle"></i>
                     </a>
                 <?php endif; ?>
-                <p class="mt-1 text-[11px] text-[#5a6a7a] pl-1">Ketik minimal 2 karakter untuk mencari</p>
             </form>
+            <p class="mt-1 text-[11px] text-[#5a6a7a] pl-1">Ketik minimal 2 karakter untuk mencari</p>
         </div>
 
         <div class="overflow-x-auto">

@@ -61,11 +61,7 @@ ob_start();
 ?>
 
 <div class="space-y-6">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-            <h1 class="text-xl font-bold text-[#1a2332]"><i class="bi bi-clock-history text-[#205295]"></i> Log Aktivitas</h1>
-            <p class="text-[13px] text-[#5a6a7a] mt-0.5">Catatan seluruh aktivitas pengguna dalam sistem</p>
-        </div>
+    <div class="flex flex-col sm:flex-row sm:items-center justify-end gap-4">
         <button onclick="window.openModalCetakLog()" type="button"
                 class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-[#205295] text-[#205295] text-[13px] font-medium rounded-xl hover:bg-[#e1edfa] transition shadow-sm">
             <i class="bi bi-printer"></i> Cetak Laporan
@@ -74,7 +70,7 @@ ob_start();
 
     <div class="bg-white rounded-xl shadow-sm border border-[#dce3ed] overflow-hidden">
         <div class="px-6 py-4 border-b border-[#dce3ed]">
-            <form method="GET" action="/log-aktivitas" class="relative">
+            <form method="GET" action="/log-aktivitas" class="relative flex">
                 <input type="text" name="search" value="<?= e($search) ?>"
                        placeholder="Cari aktivitas..."
                        minlength="2"
@@ -86,8 +82,8 @@ ob_start();
                         <i class="bi bi-x-circle"></i>
                     </a>
                 <?php endif; ?>
-                <p class="mt-1 text-[11px] text-[#5a6a7a] pl-1">Ketik minimal 2 karakter untuk mencari</p>
             </form>
+            <p class="mt-1 text-[11px] text-[#5a6a7a] pl-1">Ketik minimal 2 karakter untuk mencari</p>
         </div>
 
         <div class="overflow-x-auto">

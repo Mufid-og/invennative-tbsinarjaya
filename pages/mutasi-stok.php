@@ -4,8 +4,9 @@ $breadcrumb = 'Mutasi Stok';
 $activeMenu = 'mutasi-stok';
 $pageTitle = 'Riwayat Mutasi Stok - Inventaris Toko Bangunan';
 
-function format_tanggal($dateStr) {
-    $months = [1=>'Januari',2=>'Februari',3=>'Maret',4=>'April',5=>'Mei',6=>'Juni',7=>'Juli',8=>'Agustus',9=>'September',10=>'Oktober',11=>'November',12=>'Desember'];
+function format_tanggal($dateStr)
+{
+    $months = [1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus', 9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'];
     $dt = new DateTime($dateStr);
     return $dt->format('d') . ' ' . $months[(int)$dt->format('m')] . ' ' . $dt->format('Y H:i');
 }
@@ -90,8 +91,8 @@ ob_start();
 <div class="space-y-6">
     <?php if ($flash): ?>
         <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 4000)"
-             x-transition:leave="transition ease-in duration-300" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-             class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium shadow-sm
+            x-transition:leave="transition ease-in duration-300" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+            class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium shadow-sm
                     <?= $flash['type'] === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200' ?>">
             <i class="bi <?= $flash['type'] === 'success' ? 'bi-check-circle-fill text-emerald-500' : 'bi-exclamation-circle-fill text-red-500' ?>"></i>
             <?= e($flash['message']) ?>
@@ -100,38 +101,32 @@ ob_start();
     <?php endif; ?>
 
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-            <h1 class="text-xl font-bold text-[#1a2332]"><i class="bi bi-arrow-left-right text-[#205295]"></i> Riwayat Mutasi Stok</h1>
-            <p class="text-[13px] text-[#5a6a7a] mt-0.5">Seluruh catatan masuk &amp; keluar barang</p>
-        </div>
-        <div class="flex items-center gap-2.5">
-            <button onclick="window.openModalCetakMutasi()" type="button"
-                    class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-[#dce3ed] text-[#5a6a7a] text-[13px] font-medium rounded-xl hover:bg-[#f0f4f8] transition shadow-sm">
-                <i class="bi bi-printer"></i> Cetak Laporan
-            </button>
-            <a href="/mutasi-stok/input?new=1"
-               class="inline-flex items-center gap-2 px-4 py-2.5 bg-[#205295] text-white text-[13px] font-semibold rounded-xl hover:bg-[#183d72] transition shadow-sm">
-                <i class="bi bi-plus-lg"></i> Input Mutasi Stok
-            </a>
-        </div>
+        <a href="/mutasi-stok/input?new=1"
+            class="inline-flex items-center gap-2 px-4 py-2.5 bg-[#205295] text-white text-[13px] font-semibold rounded-xl hover:bg-[#183d72] transition shadow-sm">
+            <i class="bi bi-plus-lg"></i> Input Mutasi Stok
+        </a>
+        <button onclick="window.openModalCetakMutasi()" type="button"
+            class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-[#dce3ed] text-[#5a6a7a] text-[13px] font-medium rounded-xl hover:bg-[#f0f4f8] transition shadow-sm">
+            <i class="bi bi-printer"></i> Cetak Laporan
+        </button>
     </div>
 
     <div class="bg-white rounded-xl shadow-sm border border-[#dce3ed] overflow-hidden">
         <div class="px-6 py-4 border-b border-[#dce3ed]">
-            <form method="GET" action="/mutasi-stok" class="relative">
-                <input type="text" name="search" value="<?= e($search) ?>"
-                       placeholder="Cari produk / merek / ukuran / tanggal"
-                       minlength="2"
-                       title="Ketik minimal 2 karakter untuk mencari"
-                       class="w-full pl-10 pr-4 py-2.5 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] transition bg-[#f7faff]">
-                <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5a6a7a] text-sm"></i>
+            <form method="GET" action="/mutasi-stok" class="relative flex">
+                    <input type="text" name="search" value="<?= e($search) ?>"
+                        placeholder="Cari produk / merek / ukuran / tanggal"
+                        minlength="2"
+                        title="Ketik minimal 2 karakter untuk mencari"
+                        class="w-full pl-10 pr-4 py-2.5 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] transition bg-[#f7faff]">
+                    <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5a6a7a] text-sm"></i>
                 <?php if ($search !== ''): ?>
                     <a href="/mutasi-stok" class="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a6a7a] hover:text-[#c0392b] transition text-sm" title="Hapus pencarian">
                         <i class="bi bi-x-circle"></i>
                     </a>
                 <?php endif; ?>
-                <p class="mt-1 text-[11px] text-[#5a6a7a] pl-1">Ketik minimal 2 karakter untuk mencari</p>
             </form>
+            <p class="mt-1 text-[11px] text-[#5a6a7a] pl-1">Ketik minimal 2 karakter untuk mencari</p>
         </div>
 
         <div class="overflow-x-auto">
@@ -208,16 +203,18 @@ ob_start();
 </div>
 
 <script>
-window.openModalCetakMutasi = function() {
-    var now = new Date();
-    var pad = function(n) { return String(n).padStart(2, '0'); };
-    var dari = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-01';
-    var lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    var sampai = lastDay.getFullYear() + '-' + pad(lastDay.getMonth() + 1) + '-' + pad(lastDay.getDate());
+    window.openModalCetakMutasi = function() {
+        var now = new Date();
+        var pad = function(n) {
+            return String(n).padStart(2, '0');
+        };
+        var dari = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-01';
+        var lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        var sampai = lastDay.getFullYear() + '-' + pad(lastDay.getMonth() + 1) + '-' + pad(lastDay.getDate());
 
-    Swal.fire({
-        title: 'Cetak Laporan Mutasi',
-        html: `
+        Swal.fire({
+            title: 'Cetak Laporan Mutasi',
+            html: `
             <div class="text-left space-y-3">
                 <div>
                     <label class="block text-[13px] font-medium text-[#5a6a7a] mb-1">Dari Tanggal</label>
@@ -229,26 +226,28 @@ window.openModalCetakMutasi = function() {
                 </div>
             </div>
         `,
-        confirmButtonText: 'Tampilkan & Cetak',
-        confirmButtonColor: '#205295',
-        cancelButtonText: 'Batal',
-        showCancelButton: true,
-        customClass: { popup: 'rounded-2xl' },
-        preConfirm: () => {
-            const dari = document.getElementById('cetak-dari').value;
-            const sampai = document.getElementById('cetak-sampai').value;
-            if (!dari || !sampai) {
-                Swal.showValidationMessage('Isi periode tanggal terlebih dahulu.');
-                return false;
-            }
-            if (sampai < dari) {
-                Swal.showValidationMessage('Tanggal "sampai" tidak boleh sebelum "dari".');
-                return false;
-            }
-            window.open('/cetak-mutasi?dari=' + dari + '&sampai=' + sampai, '_blank');
-        },
-    });
-};
+            confirmButtonText: 'Tampilkan & Cetak',
+            confirmButtonColor: '#205295',
+            cancelButtonText: 'Batal',
+            showCancelButton: true,
+            customClass: {
+                popup: 'rounded-2xl'
+            },
+            preConfirm: () => {
+                const dari = document.getElementById('cetak-dari').value;
+                const sampai = document.getElementById('cetak-sampai').value;
+                if (!dari || !sampai) {
+                    Swal.showValidationMessage('Isi periode tanggal terlebih dahulu.');
+                    return false;
+                }
+                if (sampai < dari) {
+                    Swal.showValidationMessage('Tanggal "sampai" tidak boleh sebelum "dari".');
+                    return false;
+                }
+                window.open('/cetak-mutasi?dari=' + dari + '&sampai=' + sampai, '_blank');
+            },
+        });
+    };
 </script>
 <?php
 $content = ob_get_clean();
