@@ -1,0 +1,13 @@
+/tools/tailwindcss-windows-x64.exe
+# Cache
+/storage/cache/
+
+# Dependencies
+/vendor/
+/node_modules/
+
+# Environment
+.env
+
+# Build artifacts
+/public/css/tailwind.css

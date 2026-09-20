@@ -16,9 +16,9 @@ $fullUri = $_SERVER['REQUEST_URI'];
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle) ?></title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link href="/vendor/twbs/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/public/css/tailwind.css" rel="stylesheet">
+    <script src="/vendor/sweetalert2/sweetalert2.all.js"></script>
     <style>
         #lw-progress-bar {
             position: fixed;

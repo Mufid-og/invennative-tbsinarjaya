@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+/* Hanya pindai folder project, jangan vendor/tools/dll */
+@source "../pages/**/*.php";
+@source "../pages/*.php";
+@source "../*.php";
+
+
+/* Kecualikan folder berat */
+@source not "../vendor";
+@source not "../tools";
