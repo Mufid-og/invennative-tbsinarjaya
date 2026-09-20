@@ -26,17 +26,78 @@ function format_tanggal_kop(string $dateStr): string
     return $dt->format('d') . ' ' . bulan_indonesia((int)$dt->format('m')) . ' ' . $dt->format('Y');
 }
 
+// ===== Guard & streaming: COUNT dulu (1 angka), jangan fetchAll semua baris =====
+// Range predicate langsung di kolom (bukan date() function) agar idx_log_aktivitas_created_id
+// bisa dipakai — date(created_at) di WHERE mencegah index digunakan.
+// Batas atas: awal hari setelah $sampai (exclusive <) menggantikan inclusive BETWEEN.
+$sampaiNext = date('Y-m-d', strtotime($sampai . ' +1 day')) . ' 00:00:00';
+$dariStart  = $dari . ' 00:00:00';
+
+$countStmt = db()->prepare("
+    SELECT COUNT(*)
+    FROM log_aktivitas l
+    WHERE l.created_at >= ? AND l.created_at < ?
+");
+$countStmt->execute([$dariStart, $sampaiNext]);
+$totalLogs = (int)$countStmt->fetchColumn();
+
+// Peringatan bila periode lintas lebih dari 3 bulan
+$dariObj = new DateTime($dari);
+$sampaiObj = new DateTime($sampai);
+$selisih = $dariObj->diff($sampaiObj);
+$bulanPeriode = $selisih->y * 12 + $selisih->m;
+$warningPeriodeBesar = $bulanPeriode > 3;
+unset($dariObj, $sampaiObj, $selisih);
+
+// Konfirmasi bila data lebih dari 10.000 baris (sebelum render penuh)
+if ($totalLogs > 10000 && !isset($_GET['confirm'])) {
+    ?>
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Konfirmasi — Laporan Log Aktivitas</title>
+        <style>
+            * { margin:0; padding:0; box-sizing:border-box; }
+            body { font-family:'Segoe UI',Roboto,Arial,sans-serif; background:#eef2f7; color:#1a2332; }
+            .card { max-width:520px; margin:70px auto; background:#fff; border:1px solid #dce3ed; border-radius:12px; padding:28px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+            .card h2 { margin-top:0; font-size:18px; }
+            .card p { color:#5a6a7a; font-size:14px; line-height:1.6; }
+            .row { display:flex; gap:10px; margin-top:20px; }
+            .btn { border:0; border-radius:8px; padding:10px 16px; font-size:13px; font-weight:600; cursor:pointer; color:#fff; text-decoration:none; }
+            .btn-primary { background:#2c74b3; }
+            .btn-ghost { background:#c3cbd5; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h2>Data terlalu besar untuk dicetak</h2>
+            <p>Periode ini berisi <strong><?= number_format($totalLogs, 0, ',', '.') ?></strong> baris aktivitas. Cetakan berskala besar akan berat. Pertimbangkan mempersempit periode (maksimal 3 bulan) sebelum mencetak.</p>
+            <div class="row">
+                <a class="btn btn-primary" href="?dari=<?= e(urlencode($dari)) ?>&sampai=<?= e(urlencode($sampai)) ?>&confirm=1">Lanjutkan Cetak</a>
+                <button class="btn btn-ghost" onclick="window.close()">Tutup</button>
+            </div>
+        </div>
+    </body>
+    </html>
+    <?php
+    exit;
+}
+
+// Streaming: fetch per baris, bukan fetchAll (memori PHP konstan)
+// Range predicate: idx_log_aktivitas_created_id (created_at DESC, id DESC) dipakai
+// untuk filter DAN sort sekaligus — tidak perlu filesort terpisah.
 $stmt = db()->prepare("
     SELECT l.*, us.nama as user_nama
     FROM log_aktivitas l
     LEFT JOIN users us ON us.id = l.id_user
-    WHERE date(l.created_at) BETWEEN date(?) AND date(?)
+    WHERE l.created_at >= ? AND l.created_at < ?
     ORDER BY l.created_at DESC
 ");
-$stmt->execute([$dari, $sampai]);
-$logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$stmt->execute([$dariStart, $sampaiNext]);
+$stmt->setFetchMode(PDO::FETCH_ASSOC);
 
-$totalLogs = count($logs);
 $user = auth_user();
 $userName = $user['nama'] ?? '________';
 ?>
@@ -67,6 +128,7 @@ $userName = $user['nama'] ?? '________';
         .kop-right h2 { font-size: 17px; }
         .kop-right p { color: #5a6a7a; margin-top: 4px; }
         .summary { color: #5a6a7a; margin: 22px 0 12px; }
+        .warning-box { background:#fff7e6; border:1px solid #f0d390; color:#8a5b00; padding:10px 14px; border-radius:8px; font-size:13px; margin:0 0 12px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #dce3ed; border-radius: 8px; overflow: hidden; }
         thead { background: #f0f4f9; }
         thead th { text-align: left; text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; color: #5a6a7a; font-weight: 600; padding: 10px 12px; border-bottom: 1px solid #dce3ed; }
@@ -115,6 +177,10 @@ $userName = $user['nama'] ?? '________';
 
             <div class="summary">Total <strong><?= $totalLogs ?></strong> catatan aktivitas</div>
 
+            <?php if ($warningPeriodeBesar): ?>
+                <div class="warning-box">Periode lebih dari 3 bulan — jumlah data bisa sangat banyak. Persempit periode agar proses cetak lebih ringan.</div>
+            <?php endif; ?>
+
             <table>
                 <thead>
                     <tr>
@@ -127,10 +193,10 @@ $userName = $user['nama'] ?? '________';
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if (empty($logs)): ?>
+                    <?php if ($totalLogs === 0): ?>
                         <tr><td colspan="6" class="empty">Tidak ada data pada periode ini.</td></tr>
                     <?php else: ?>
-                        <?php foreach ($logs as $log): ?>
+                        <?php while ($log = $stmt->fetch()): ?>
                             <tr>
                                 <td><?= e(format_tanggal($log['created_at'])) ?></td>
                                 <td><?= e($log['user_nama'] !== null && $log['user_nama'] !== '' ? $log['user_nama'] : 'Sistem') ?></td>
@@ -149,7 +215,7 @@ $userName = $user['nama'] ?? '________';
                                 <td><?= e($log['deskripsi']) ?></td>
                                 <td><?= e($log['ip_address']) ?></td>
                             </tr>
-                        <?php endforeach; ?>
+                        <?php endwhile; ?>
                     <?php endif; ?>
                 </tbody>
             </table>

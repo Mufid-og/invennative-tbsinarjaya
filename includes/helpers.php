@@ -61,13 +61,24 @@ function get_input(string $key, $default = ''): string
 
 function log_aktivitas(string $aksi, ?string $modul, ?int $idReferensi, string $deskripsi, ?array $dataPerubahan = null): void
 {
-    $userId = auth_id();
-    $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
-    $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
-    $jsonData = $dataPerubahan !== null ? json_encode($dataPerubahan, JSON_UNESCAPED_UNICODE) : null;
+    // prepare sekali per request, execute berkali-kali (static cache).
+    // Kritis saat log_aktivitas dipanggil N kali dalam loop (misal: batch mutasi stok)
+    // agar tidak terjadi N× rekompilasi SQL + alokasi statement baru.
+    static $stmt = null;
+    if ($stmt === null) {
+        $stmt = db()->prepare(
+            'INSERT INTO log_aktivitas
+                (id_user, aksi, modul, id_referensi, deskripsi, data_perubahan, ip_address, user_agent, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+    }
 
-    $stmt = db()->prepare('INSERT INTO log_aktivitas (id_user, aksi, modul, id_referensi, deskripsi, data_perubahan, ip_address, user_agent, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    $ts = now();
+    $userId   = auth_id();
+    $ip       = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    $ua       = $_SERVER['HTTP_USER_AGENT'] ?? '';
+    $jsonData = $dataPerubahan !== null ? json_encode($dataPerubahan, JSON_UNESCAPED_UNICODE) : null;
+    $ts       = now();
+
     $stmt->execute([$userId, $aksi, $modul, $idReferensi, $deskripsi, $jsonData, $ip, $ua, $ts, $ts]);
 }
 
@@ -106,8 +117,8 @@ function paginate(string $table, string $where, array $params, int $perPage = 15
 function indonesian_month_search(string $search, string $tableAlias = ''): array
 {
     $conditions = [];
-    $params = [];
-    $term = mb_strtolower(trim($search));
+    $params     = [];
+    $term       = mb_strtolower(trim($search));
 
     $bulanMap = [
         'januari' => 1, 'februari' => 2, 'maret' => 3, 'april' => 4,
@@ -118,7 +129,7 @@ function indonesian_month_search(string $search, string $tableAlias = ''): array
     preg_match('/\b(19|20)\d{2}\b/', $term, $tahunMatches);
     $tahun = $tahunMatches[0] ?? null;
     $bulan = null;
-    $hari = null;
+    $hari  = null;
 
     foreach ($bulanMap as $nama => $no) {
         if (str_contains($term, $nama)) {
@@ -132,20 +143,48 @@ function indonesian_month_search(string $search, string $tableAlias = ''): array
         $hari = (int)$hariMatches[1];
     }
 
-    $col = $tableAlias ? "{$tableAlias}.tanggal" : 'tanggal';
+    $col    = $tableAlias ? "{$tableAlias}.tanggal" : 'tanggal';
+    $bulanS = $bulan !== null ? str_pad((string)$bulan, 2, '0', STR_PAD_LEFT) : null;
+    $hariS  = $hari  !== null ? str_pad((string)$hari,  2, '0', STR_PAD_LEFT) : null;
 
-    if ($tahun) {
-        $conditions[] = "strftime('%Y', {$col}) = ?";
-        $params[] = $tahun;
-    }
-    if ($bulan) {
-        $conditions[] = "strftime('%m', {$col}) = ?";
-        $params[] = str_pad((string)$bulan, 2, '0', STR_PAD_LEFT);
-    }
-    if ($bulan && $hari !== null) {
-        $conditions[] = "(strftime('%d', {$col}) = ? AND strftime('%m', {$col}) = ?)";
-        $params[] = str_pad((string)$hari, 2, '0', STR_PAD_LEFT);
-        $params[] = str_pad((string)$bulan, 2, '0', STR_PAD_LEFT);
+    // ── Range predicate — kolom tidak dibungkus fungsi sehingga index bisa dipakai.
+    // Urutan prioritas: (hari+bulan+tahun) > (bulan+tahun) > (tahun) > (bulan) > (hari+bulan)
+
+    if ($bulan !== null && $hari !== null && $tahun !== null) {
+        // "15 September 2026" → range 1 hari penuh
+        $start = "{$tahun}-{$bulanS}-{$hariS} 00:00:00";
+        $end   = date('Y-m-d', strtotime($start) + 86400) . ' 00:00:00';
+        $conditions[] = "{$col} >= ? AND {$col} < ?";
+        $params[]     = $start;
+        $params[]     = $end;
+
+    } elseif ($bulan !== null && $tahun !== null) {
+        // "September 2026" → range 1 bulan penuh
+        $start  = "{$tahun}-{$bulanS}-01 00:00:00";
+        // Bulan berikutnya: tambah 1 bulan lalu ambil hari pertama
+        $endDt  = new DateTime("{$tahun}-{$bulanS}-01");
+        $endDt->modify('+1 month');
+        $end    = $endDt->format('Y-m-d') . ' 00:00:00';
+        $conditions[] = "{$col} >= ? AND {$col} < ?";
+        $params[]     = $start;
+        $params[]     = $end;
+
+    } elseif ($tahun !== null) {
+        // "2026" → range 1 tahun penuh
+        $conditions[] = "{$col} >= ? AND {$col} < ?";
+        $params[]     = "{$tahun}-01-01 00:00:00";
+        $params[]     = ((int)$tahun + 1) . '-01-01 00:00:00';
+
+    } elseif ($bulan !== null && $hari !== null) {
+        // "15 September" (tanpa tahun) → LIKE '____-09-15%'
+        // Tidak ada leading wildcard pada segmen bulan-hari; SQLite bisa partial scan.
+        $conditions[] = "{$col} LIKE ?";
+        $params[]     = "____-{$bulanS}-{$hariS}%";
+
+    } elseif ($bulan !== null) {
+        // "September" (tanpa tahun) → LIKE '____-09-%'
+        $conditions[] = "{$col} LIKE ?";
+        $params[]     = "____-{$bulanS}-%";
     }
 
     return ['conditions' => $conditions, 'params' => $params];

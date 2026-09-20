@@ -31,6 +31,7 @@ if ($selectedMerekId) {
 }
 
 require_once __DIR__ . '/../actions/produk.php';
+require_once __DIR__ . '/../includes/search_helper.php';
 
 // ----- Pagination helpers -----
 $page = max(1, (int)($_GET['page'] ?? 1));
@@ -79,6 +80,8 @@ ob_start();
                 <?php if ($selectedProdukId): ?><input type="hidden" name="produk" value="<?= $selectedProdukId ?>"><?php endif; ?>
                 <?php if ($selectedMerekId): ?><input type="hidden" name="merek" value="<?= $selectedMerekId ?>"><?php endif; ?>
                 <input name="search" type="text" value="<?= e($search) ?>" placeholder="Cari data..."
+                       minlength="2"
+                       title="Ketik minimal 2 karakter untuk mencari"
                        class="w-full pl-10 pr-4 py-2.5 border border-[#c9cbd3] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2c74b3]">
             </form>
         </div>
@@ -103,11 +106,13 @@ ob_start();
 
     <?php if (!$selectedProdukId): ?>
         <?php
-        $params = [];
-        if ($search !== '') $params[] = 'p.nama LIKE ?'; else $params = [];
         $where = 'p.deleted_at IS NULL';
         $whereParams = [];
-        if ($search !== '') { $where .= ' AND p.nama LIKE ?'; $whereParams[] = '%' . $search . '%'; }
+        if ($search !== '' && search_min_length($search)) {
+            [$searchSql, $searchParams] = fts_search_produk($search);
+            $where .= ' AND ' . $searchSql;
+            $whereParams = $searchParams;
+        }
         $stmt = $db->prepare("SELECT COUNT(*) FROM produk p WHERE {$where}");
         $stmt->execute($whereParams);
         $total = (int)$stmt->fetchColumn();
@@ -206,7 +211,15 @@ ob_start();
         <?php
         $where = 'm.id_produk = ? AND m.deleted_at IS NULL';
         $whereParams = [$selectedProdukId];
-        if ($search !== '') { $where .= ' AND m.merek LIKE ?'; $whereParams[] = '%' . $search . '%'; }
+        if ($search !== '' && search_min_length($search)) {
+            [$searchSql, $searchParams] = fts_search_merek($search, $selectedProdukId);
+            // fts_search_merek sudah menyertakan filter id_produk di FTS, tapi
+            // untuk prefix LIKE fallback, kita tetap butuh filter m.id_produk
+            // dari $where di atas — sehingga hapus filter FTS jika pakai FTS5
+            // (sudah di-handle di dalam fts_search_merek)
+            $where .= ' AND ' . $searchSql;
+            $whereParams = array_merge($whereParams, $searchParams);
+        }
         $stmt = $db->prepare("SELECT COUNT(*) FROM merek m WHERE {$where}");
         $stmt->execute($whereParams);
         $total = (int)$stmt->fetchColumn();
@@ -303,7 +316,11 @@ ob_start();
         <?php
         $where = 'u.id_merek = ? AND u.deleted_at IS NULL';
         $whereParams = [$selectedMerekId];
-        if ($search !== '') { $where .= ' AND u.ukuran LIKE ?'; $whereParams[] = '%' . $search . '%'; }
+        if ($search !== '' && search_min_length($search)) {
+            [$searchSql, $searchParams] = fts_search_ukuran($search, $selectedMerekId);
+            $where .= ' AND ' . $searchSql;
+            $whereParams = array_merge($whereParams, $searchParams);
+        }
         $stmt = $db->prepare("SELECT COUNT(*) FROM ukuran u WHERE {$where}");
         $stmt->execute($whereParams);
         $total = (int)$stmt->fetchColumn();

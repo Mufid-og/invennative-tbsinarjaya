@@ -20,21 +20,60 @@ $keranjang = $_SESSION['mutasi_keranjang'] ?? [];
 
 $flash = get_flash();
 
+// ===== Search + paginasi berbasis SQL: tidak pernah tarik semua baris =====
+$produkSearch = trim($_GET['q'] ?? '');
+$produkPerPage = 100;
+
+require_once __DIR__ . '/../includes/search_helper.php';
+
 $produkList = [];
-if ($jenis === 'masuk') {
-    $produkList = $db->query("SELECT p.* FROM produk p WHERE p.deleted_at IS NULL ORDER BY p.nama ASC")->fetchAll(PDO::FETCH_ASSOC);
-} elseif ($jenis === 'keluar') {
-    $produkList = $db->query("SELECT DISTINCT p.* FROM produk p JOIN merek m ON m.id_produk = p.id AND m.deleted_at IS NULL JOIN ukuran u ON u.id_merek = m.id AND u.deleted_at IS NULL WHERE p.deleted_at IS NULL AND u.stok > 0 ORDER BY p.nama ASC")->fetchAll(PDO::FETCH_ASSOC);
+if ($jenis && $step === 'produk') {
+    $produkPage = max(1, (int)($_GET['page'] ?? 1));
+
+    if ($jenis === 'masuk') {
+        $produkFrom = 'FROM produk p';
+        $produkWhere = 'p.deleted_at IS NULL';
+    } else {
+        $produkFrom = 'FROM produk p JOIN merek m ON m.id_produk = p.id AND m.deleted_at IS NULL JOIN ukuran u ON u.id_merek = m.id AND u.deleted_at IS NULL';
+        $produkWhere = 'p.deleted_at IS NULL AND u.stok > 0';
+    }
+    if ($produkSearch !== '' && search_min_length($produkSearch)) {
+        [$produkSearchSql, $produkSearchParams] = fts_search_produk($produkSearch);
+        // fts_search_produk menghasilkan "p.id IN (...)" atau "p.nama LIKE ..."
+        $produkWhere .= ' AND ' . $produkSearchSql;
+    } else {
+        $produkSearchParams = [];
+    }
+
+    $countArgs = $produkSearchParams;
+    $countP = $db->prepare('SELECT COUNT(' . ($jenis === 'masuk' ? '*' : 'DISTINCT p.id') . ') ' . $produkFrom . ' WHERE ' . $produkWhere);
+    $countP->execute($countArgs);
+    $produkTotal = (int)$countP->fetchColumn();
+    $produkTotalPages = max(1, (int)ceil($produkTotal / $produkPerPage));
+    $produkPage = min($produkPage, $produkTotalPages);
+    $produkOffset = ($produkPage - 1) * $produkPerPage;
+
+    $stmt = $db->prepare('SELECT DISTINCT p.* ' . $produkFrom . ' WHERE ' . $produkWhere . ' ORDER BY p.nama ASC LIMIT ? OFFSET ?');
+    $stmt->execute(array_merge($countArgs, [$produkPerPage, $produkOffset]));
+    $produkList = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 $merekList = [];
 if ($jenis && $step === 'merek' && $produkId) {
-    if ($jenis === 'masuk') {
-        $stmt = $db->prepare("SELECT m.* FROM merek m WHERE m.id_produk = ? AND m.deleted_at IS NULL ORDER BY m.merek ASC");
-    } else {
-        $stmt = $db->prepare("SELECT DISTINCT m.* FROM merek m JOIN ukuran u ON u.id_merek = m.id AND u.deleted_at IS NULL WHERE m.id_produk = ? AND m.deleted_at IS NULL AND u.stok > 0 ORDER BY m.merek ASC");
+    $qMerek = trim($_GET['q'] ?? '');
+    $merekWhere = 'm.id_produk = ? AND m.deleted_at IS NULL';
+    $merekArgs = [$produkId];
+    if ($qMerek !== '' && search_min_length($qMerek)) {
+        [$merekSearchSql, $merekSearchParams] = fts_search_merek($qMerek, $produkId);
+        $merekWhere .= ' AND ' . $merekSearchSql;
+        $merekArgs = array_merge($merekArgs, $merekSearchParams);
     }
-    $stmt->execute([$produkId]);
+    if ($jenis === 'masuk') {
+        $stmt = $db->prepare('SELECT m.* FROM merek m WHERE ' . $merekWhere . ' ORDER BY m.merek ASC LIMIT 200');
+    } else {
+        $stmt = $db->prepare('SELECT DISTINCT m.* FROM merek m JOIN ukuran u ON u.id_merek = m.id AND u.deleted_at IS NULL WHERE ' . $merekWhere . ' AND u.stok > 0 ORDER BY m.merek ASC LIMIT 200');
+    }
+    $stmt->execute($merekArgs);
     $merekList = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -44,12 +83,24 @@ if ($jenis && $step === 'ukuran' && $merekId) {
     $merekInfo->execute([$merekId]);
     $merekInfo = $merekInfo->fetch(PDO::FETCH_ASSOC);
 
-    if ($jenis === 'masuk') {
-        $stmt = $db->prepare("SELECT u.* FROM ukuran u WHERE u.id_merek = ? AND u.deleted_at IS NULL ORDER BY CAST(u.ukuran AS REAL) ASC");
-    } else {
-        $stmt = $db->prepare("SELECT u.* FROM ukuran u WHERE u.id_merek = ? AND u.deleted_at IS NULL AND u.stok > 0 ORDER BY CAST(u.ukuran AS REAL) ASC");
+    $qUkuran = trim($_GET['q'] ?? '');
+    $ukuranWhere = 'u.id_merek = ? AND u.deleted_at IS NULL';
+    $ukuranArgs = [$merekId];
+    if ($qUkuran !== '' && search_min_length($qUkuran)) {
+        [$ukuranSearchSql, $ukuranSearchParams] = fts_search_ukuran($qUkuran, $merekId);
+        // Hapus alias 'u.' untuk query ini (tidak pakai JOIN)
+        $ukuranSearchSqlClean = str_replace('u.id IN ', 'u.id IN ', str_replace('u.ukuran LIKE', 'u.ukuran LIKE', $ukuranSearchSql));
+        $ukuranWhere .= ' AND ' . $ukuranSearchSqlClean;
+        $ukuranArgs = array_merge($ukuranArgs, $ukuranSearchParams);
     }
-    $stmt->execute([$merekId]);
+    if ($jenis === 'masuk') {
+        // ukuran_numeric = CAST(ukuran AS REAL) yang di-maintain oleh trigger;
+        // index idx_ukuran_numeric(id_merek, ukuran_numeric) menghilangkan filesort.
+        $stmt = $db->prepare('SELECT u.* FROM ukuran u WHERE ' . $ukuranWhere . ' ORDER BY u.ukuran_numeric ASC LIMIT 200');
+    } else {
+        $stmt = $db->prepare('SELECT u.* FROM ukuran u WHERE ' . $ukuranWhere . ' AND u.stok > 0 ORDER BY u.ukuran_numeric ASC LIMIT 200');
+    }
+    $stmt->execute($ukuranArgs);
     $ukuranList = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -166,22 +217,14 @@ ob_start();
                             <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5a6a7a] text-sm"></i>
                         </form>
                     </div>
-                    <?php
-                    $qProduk = trim($_GET['q'] ?? '');
-                    if ($qProduk !== '') {
-                        $filteredProduk = array_values(array_filter($produkList, fn($p) => stripos($p['nama'], $qProduk) !== false));
-                    } else {
-                        $filteredProduk = $produkList;
-                    }
-                    ?>
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        <?php if (empty($filteredProduk)): ?>
+                        <?php if (empty($produkList)): ?>
                             <div class="col-span-full py-10 text-center text-[#5a6a7a]">
                                 <i class="bi bi-inbox text-3xl block mb-2 text-[#c3cbd5]"></i>
                                 Tidak ada produk ditemukan.
                             </div>
                         <?php else: ?>
-                            <?php foreach ($filteredProduk as $p): ?>
+                            <?php foreach ($produkList as $p): ?>
                                 <form method="POST" action="/mutasi-stok/input">
                                     <input type="hidden" name="action" value="pilih_produk">
                                     <input type="hidden" name="produk_id" value="<?= $p['id'] ?>">
@@ -201,6 +244,25 @@ ob_start();
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </div>
+                    <?php if ($produkTotalPages > 1): ?>
+                        <div class="mt-4 flex items-center justify-between gap-3 text-[13px] text-[#5a6a7a]">
+                            <span>Menampilkan <?= $produkTotal > 0 ? (($produkPage - 1) * $produkPerPage + 1) : 0 ?>–<?= min($produkPage * $produkPerPage, $produkTotal) ?> dari <?= $produkTotal ?> produk</span>
+                            <span class="flex items-center gap-2">
+                                <?php if ($produkPage > 1): ?>
+                                    <a href="/mutasi-stok/input?step=produk&q=<?= e(urlencode($produkSearch)) ?>&page=<?= $produkPage - 1 ?>"
+                                       class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#dce3ed] bg-white hover:border-[#2c74b3] hover:text-[#2c74b3] transition">
+                                        <i class="bi bi-chevron-left"></i> Sebelumnya
+                                    </a>
+                                <?php endif; ?>
+                                <?php if ($produkPage < $produkTotalPages): ?>
+                                    <a href="/mutasi-stok/input?step=produk&q=<?= e(urlencode($produkSearch)) ?>&page=<?= $produkPage + 1 ?>"
+                                       class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#dce3ed] bg-white hover:border-[#2c74b3] hover:text-[#2c74b3] transition">
+                                        Selanjutnya <i class="bi bi-chevron-right"></i>
+                                    </a>
+                                <?php endif; ?>
+                            </span>
+                        </div>
+                    <?php endif; ?>
 
                     <!-- Step: Pilih Merek -->
                 <?php elseif ($step === 'merek'): ?>
@@ -213,22 +275,14 @@ ob_start();
                             <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5a6a7a] text-sm"></i>
                         </form>
                     </div>
-                    <?php
-                    $qMerek = trim($_GET['q'] ?? '');
-                    if ($qMerek !== '') {
-                        $filteredMerek = array_values(array_filter($merekList, fn($m) => stripos($m['merek'], $qMerek) !== false));
-                    } else {
-                        $filteredMerek = $merekList;
-                    }
-                    ?>
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        <?php if (empty($filteredMerek)): ?>
+                        <?php if (empty($merekList)): ?>
                             <div class="col-span-full py-10 text-center text-[#5a6a7a]">
                                 <i class="bi bi-inbox text-3xl block mb-2 text-[#c3cbd5]"></i>
                                 Tidak ada merek ditemukan.
                             </div>
                         <?php else: ?>
-                            <?php foreach ($filteredMerek as $m): ?>
+                            <?php foreach ($merekList as $m): ?>
                                 <form method="POST" action="/mutasi-stok/input">
                                     <input type="hidden" name="action" value="pilih_merek">
                                     <input type="hidden" name="merek_id" value="<?= $m['id'] ?>">
@@ -262,22 +316,14 @@ ob_start();
                             <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5a6a7a] text-sm"></i>
                         </form>
                     </div>
-                    <?php
-                    $qUkuran = trim($_GET['q'] ?? '');
-                    if ($qUkuran !== '') {
-                        $filteredUkuran = array_values(array_filter($ukuranList, fn($u) => stripos($u['ukuran'], $qUkuran) !== false));
-                    } else {
-                        $filteredUkuran = $ukuranList;
-                    }
-                    ?>
                     <div class="flex flex-wrap gap-3">
-                        <?php if (empty($filteredUkuran)): ?>
+                        <?php if (empty($ukuranList)): ?>
                             <div class="col-span-full py-10 text-center text-[#5a6a7a]">
                                 <i class="bi bi-inbox text-3xl block mb-2 text-[#c3cbd5]"></i>
                                 Tidak ada ukuran ditemukan.
                             </div>
                         <?php else: ?>
-                            <?php foreach ($filteredUkuran as $u): ?>
+                            <?php foreach ($ukuranList as $u): ?>
                                 <?php $inCart = isset($keranjang[$u['id']]); ?>
                                 <div class="bg-white rounded-xl border <?= $inCart ? 'border-emerald-400 bg-emerald-50/30' : 'border-[#dce3ed]' ?> p-4 <?= $inCart ? '' : 'hover:border-[#205295] hover:shadow-md' ?> transition-all duration-150">
                                     <div class="flex items-center gap-3">
@@ -345,13 +391,27 @@ ob_start();
                                     <p class="text-[11px] text-[#aab4c0] mt-1">Pilih ukuran barang terlebih dahulu.</p>
                                 </div>
                             <?php else: ?>
+                                <?php
+                                // ── Batch load keranjang: 1 query WHERE IN mengganti N SELECT ──
+                                $cartIds  = array_keys($keranjang);
+                                $cartPh   = implode(',', array_fill(0, count($cartIds), '?'));
+                                $cartStmt = $db->prepare(
+                                    "SELECT u.id, u.ukuran, u.stok, u.harga_modal, u.harga_jual,
+                                            m.merek, p.nama AS produk_nama
+                                     FROM ukuran u
+                                     JOIN merek m ON m.id = u.id_merek
+                                     JOIN produk p ON p.id = m.id_produk
+                                     WHERE u.id IN ({$cartPh})"
+                                );
+                                $cartStmt->execute($cartIds);
+                                $keranjangMap = [];
+                                while ($r = $cartStmt->fetch(PDO::FETCH_ASSOC)) {
+                                    $keranjangMap[(int)$r['id']] = $r;
+                                }
+                                ?>
                                 <div class="space-y-3 max-h-[350px] overflow-y-auto pr-1" id="cartItems">
                                     <?php foreach ($keranjang as $ukId => $item): ?>
-                                        <?php
-                                        $itemDetail = $db->prepare("SELECT u.ukuran, u.stok, m.merek, p.nama as produk_nama FROM ukuran u JOIN merek m ON m.id = u.id_merek JOIN produk p ON p.id = m.id_produk WHERE u.id = ?");
-                                        $itemDetail->execute([$ukId]);
-                                        $itemDetail = $itemDetail->fetch(PDO::FETCH_ASSOC);
-                                        ?>
+                                        <?php $itemDetail = $keranjangMap[(int)$ukId] ?? null; ?>
                                         <div class="bg-[#f7faff] rounded-xl border border-[#e4e9f0] p-3">
                                             <div class="flex items-start justify-between gap-2 mb-2">
                                                 <div class="min-w-0">

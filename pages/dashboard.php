@@ -17,32 +17,34 @@ $awal = (new DateTime())->modify('first day of this month')->modify('-5 months')
 for ($i = 0; $i < 6; $i++) {
     $m = (clone $awal)->modify("+{$i} months");
     $charts[] = [
+        'key'   => $m->format('Y-m'),
         'label' => $m->format('F Y'),
         'masuk' => 0,
         'keluar' => 0,
     ];
 }
 
+// Agregasi langsung di SQL per bulan+jenis (maks 12 baris), bukan fetch semua baris
 $startDate = (clone $awal)->format('Y-m-d 00:00:00');
-$stmtMut = $db->prepare('SELECT jenis, qty, tanggal FROM mutasi_stok WHERE deleted_at IS NULL AND tanggal >= ? AND tanggal <= ?');
-$stmtMut->execute([$startDate, date('Y-m-d 23:59:59')]);
-$rowsMut = $stmtMut->fetchAll(PDO::FETCH_ASSOC);
+$endDate = date('Y-m-d 23:59:59');
+$stmtMut = $db->prepare("
+    SELECT substr(tanggal, 1, 7) AS bulan, jenis, SUM(qty) AS total
+    FROM mutasi_stok
+    WHERE deleted_at IS NULL AND tanggal >= ? AND tanggal <= ?
+    GROUP BY substr(tanggal, 1, 7), jenis
+");
+$stmtMut->execute([$startDate, $endDate]);
 
-foreach ($rowsMut as $r) {
-    $key = (new DateTime($r['tanggal']))->format('Y-m');
-    foreach ($charts as &$c) {
-        $tmp = (new DateTime())->createFromFormat('F Y', $c['label']);
-        if ($tmp->format('Y-m') === $key) {
-            if ($r['jenis'] === 'masuk') {
-                $c['masuk'] += (float)$r['qty'];
-            } else {
-                $c['keluar'] += (float)$r['qty'];
-            }
-            break;
-        }
-    }
+$agregat = [];
+while ($r = $stmtMut->fetch(PDO::FETCH_ASSOC)) {
+    $agregat[$r['bulan']][$r['jenis']] = (float)$r['total'];
 }
-unset($c, $tmp);
+
+foreach ($charts as &$c) {
+    $c['masuk']  = $agregat[$c['key']]['masuk']  ?? 0;
+    $c['keluar'] = $agregat[$c['key']]['keluar'] ?? 0;
+}
+unset($c);
 
 $tertinggi = 1;
 foreach ($charts as $c) {

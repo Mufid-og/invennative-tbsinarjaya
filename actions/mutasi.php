@@ -38,7 +38,7 @@ switch ($action) {
         if (!$jenis) {
             redirect('/mutasi-stok/input');
         }
-        $merekId = (int)($_POST['merek_id'] ?? 0);
+        $merekId  = (int)($_POST['merek_id'] ?? 0);
         $produkId = (int)($_POST['produk_id'] ?? 0);
         if (!$merekId) {
             redirect('/mutasi-stok/input?step=produk');
@@ -51,11 +51,11 @@ switch ($action) {
         if (!$jenis) {
             redirect('/mutasi-stok/input');
         }
-        $ukuranId = (int)($_POST['ukuran_id'] ?? 0);
-        $produkId = (int)($_POST['produk_id'] ?? 0);
-        $merekId = (int)($_POST['merek_id'] ?? 0);
+        $ukuranId   = (int)($_POST['ukuran_id'] ?? 0);
+        $produkId   = (int)($_POST['produk_id'] ?? 0);
+        $merekId    = (int)($_POST['merek_id'] ?? 0);
         $hargaModal = (float)($_POST['harga_modal'] ?? 0);
-        $hargaJual = (float)($_POST['harga_jual'] ?? 0);
+        $hargaJual  = (float)($_POST['harga_jual'] ?? 0);
 
         if (!$ukuranId) {
             redirect('/mutasi-stok/input?step=ukuran&produk_id=' . $produkId . '&merek_id=' . $merekId);
@@ -66,9 +66,9 @@ switch ($action) {
         }
 
         $_SESSION['mutasi_keranjang'][$ukuranId] = [
-            'qty' => 1,
+            'qty'        => 1,
             'hargaModal' => $hargaModal,
-            'hargaJual' => $hargaJual,
+            'hargaJual'  => $hargaJual,
         ];
 
         redirect('/mutasi-stok/input?step=ukuran&produk_id=' . $produkId . '&merek_id=' . $merekId);
@@ -77,7 +77,7 @@ switch ($action) {
     case 'hapus_keranjang':
         $ukuranId = (int)($_POST['ukuran_id'] ?? 0);
         $produkId = (int)($_POST['produk_id'] ?? 0);
-        $merekId = (int)($_POST['merek_id'] ?? 0);
+        $merekId  = (int)($_POST['merek_id'] ?? 0);
 
         if (isset($_SESSION['mutasi_keranjang'][$ukuranId])) {
             unset($_SESSION['mutasi_keranjang'][$ukuranId]);
@@ -85,25 +85,25 @@ switch ($action) {
 
         $redirectUrl = '/mutasi-stok/input?step=ukuran';
         if ($produkId) $redirectUrl .= '&produk_id=' . $produkId;
-        if ($merekId) $redirectUrl .= '&merek_id=' . $merekId;
+        if ($merekId)  $redirectUrl .= '&merek_id=' . $merekId;
         redirect($redirectUrl);
         break;
 
     case 'kosongkan_keranjang':
         $_SESSION['mutasi_keranjang'] = [];
-        $step = $_GET['step'] ?? 'ukuran';
+        $step     = $_GET['step'] ?? 'ukuran';
         $produkId = (int)($_GET['produk_id'] ?? 0);
-        $merekId = (int)($_GET['merek_id'] ?? 0);
+        $merekId  = (int)($_GET['merek_id'] ?? 0);
         $redirectUrl = '/mutasi-stok/input?step=' . $step;
         if ($produkId) $redirectUrl .= '&produk_id=' . $produkId;
-        if ($merekId) $redirectUrl .= '&merek_id=' . $merekId;
+        if ($merekId)  $redirectUrl .= '&merek_id=' . $merekId;
         redirect($redirectUrl);
         break;
 
     case 'simpan':
-        $jenis = $_SESSION['mutasi_jenis'] ?? '';
-        $keranjang = $_SESSION['mutasi_keranjang'] ?? [];
-        $tanggal = trim($_POST['tanggal'] ?? '');
+        $jenis      = $_SESSION['mutasi_jenis'] ?? '';
+        $keranjang  = $_SESSION['mutasi_keranjang'] ?? [];
+        $tanggal    = trim($_POST['tanggal'] ?? '');
         $keterangan = trim($_POST['keterangan'] ?? '');
 
         if (!$jenis) {
@@ -119,14 +119,13 @@ switch ($action) {
         if ($tanggal === '') {
             set_flash('error', 'Tanggal wajib diisi.');
             $redirectUrl = '/mutasi-stok/input?step=ukuran';
-            $produkId = (int)($_GET['produk_id'] ?? 0);
-            $merekId = (int)($_GET['merek_id'] ?? 0);
+            $produkId    = (int)($_GET['produk_id'] ?? 0);
+            $merekId     = (int)($_GET['merek_id'] ?? 0);
             if ($produkId) $redirectUrl .= '&produk_id=' . $produkId;
-            if ($merekId) $redirectUrl .= '&merek_id=' . $merekId;
+            if ($merekId)  $redirectUrl .= '&merek_id=' . $merekId;
             redirect($redirectUrl);
         }
 
-        // Parse datetime
         $dt = DateTime::createFromFormat('Y-m-d\TH:i', $tanggal);
         if (!$dt) {
             set_flash('error', 'Format tanggal tidak valid.');
@@ -134,93 +133,182 @@ switch ($action) {
         }
         $tanggalFormatted = $dt->format('Y-m-d H:i:s');
 
-        // Validate each item
-        $db = db();
-        $validatedItems = [];
+        $db        = db();
+        $ukuranIds = array_keys($keranjang);
+        $n         = count($ukuranIds);
 
+        // ── [QUERY 1] Batch SELECT WHERE IN — mengganti N SELECT ─────────────
+        $placeholders = implode(',', array_fill(0, $n, '?'));
+        $batchStmt = $db->prepare(
+            "SELECT u.*, m.merek, p.nama AS produk_nama
+             FROM ukuran u
+             JOIN merek m ON m.id = u.id_merek
+             JOIN produk p ON p.id = m.id_produk
+             WHERE u.id IN ({$placeholders}) AND u.deleted_at IS NULL"
+        );
+        $batchStmt->execute($ukuranIds);
+        $ukuranMap = [];
+        while ($row = $batchStmt->fetch(PDO::FETCH_ASSOC)) {
+            $ukuranMap[(int)$row['id']] = $row;
+        }
+
+        // Validasi: semua ID keranjang harus ada di database
+        foreach ($ukuranIds as $ukId) {
+            if (!isset($ukuranMap[(int)$ukId])) {
+                set_flash('error', 'Item dengan ID ukuran ' . $ukId . ' tidak ditemukan.');
+                redirect('/mutasi-stok/input?step=ukuran');
+            }
+        }
+
+        // Validasi qty & stok, bangun $validatedItems
+        $validatedItems = [];
         foreach ($keranjang as $ukId => $item) {
-            $qty = (int)($_POST['qty_' . $ukId] ?? $item['qty'] ?? 0);
+            $qty        = (int)($_POST['qty_' . $ukId] ?? $item['qty'] ?? 0);
             $hargaModal = (float)($_POST['harga_modal_raw_' . $ukId] ?? $item['hargaModal'] ?? 0);
-            $hargaJual = (float)($_POST['harga_jual_raw_' . $ukId] ?? $item['hargaJual'] ?? 0);
+            $hargaJual  = (float)($_POST['harga_jual_raw_' . $ukId] ?? $item['hargaJual'] ?? 0);
 
             if ($qty <= 0) {
                 set_flash('error', 'Qty harus lebih dari 0 untuk setiap item.');
                 redirect('/mutasi-stok/input?step=ukuran');
             }
 
-            $stmt = $db->prepare("SELECT u.*, m.merek, p.nama as produk_nama FROM ukuran u JOIN merek m ON m.id = u.id_merek JOIN produk p ON p.id = m.id_produk WHERE u.id = ? AND u.deleted_at IS NULL");
-            $stmt->execute([$ukId]);
-            $ukuran = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            if (!$ukuran) {
-                set_flash('error', 'Item dengan ID ukuran ' . $ukId . ' tidak ditemukan.');
-                redirect('/mutasi-stok/input?step=ukuran');
-            }
+            $ukuran = $ukuranMap[(int)$ukId]; // O(1) lookup, tidak ada query
 
             if ($jenis === 'keluar' && $ukuran['stok'] < $qty) {
-                set_flash('error', 'Stok ' . $ukuran['produk_nama'] . ' (' . $ukuran['merek'] . ' / ' . $ukuran['ukuran'] . ') tidak cukup. Stok tersedia: ' . format_number($ukuran['stok'], 0) . ', diminta: ' . $qty . '.');
+                set_flash('error',
+                    'Stok ' . $ukuran['produk_nama'] . ' (' . $ukuran['merek'] . ' / ' . $ukuran['ukuran'] . ')'
+                    . ' tidak cukup. Stok tersedia: ' . format_number($ukuran['stok'], 0)
+                    . ', diminta: ' . $qty . '.'
+                );
                 redirect('/mutasi-stok/input?step=ukuran');
             }
 
             $validatedItems[] = [
-                'ukuranId' => $ukId,
-                'qty' => $qty,
+                'ukuranId'   => (int)$ukId,
+                'qty'        => $qty,
                 'hargaModal' => $hargaModal,
-                'hargaJual' => $hargaJual,
-                'ukuran' => $ukuran,
+                'hargaJual'  => $hargaJual,
+                'ukuran'     => $ukuran,
             ];
         }
 
-        // Insert in transaction
         try {
             $db->beginTransaction();
             $ts = now();
 
+            // ── [QUERY 2] 1 multi-row INSERT — mengganti N INSERT ─────────────
+            // SQL bervariasi per N item sehingga tidak bisa di-cache via static,
+            // tapi assign ke variable agar mudah di-debug dan error bisa ditrap.
+            $insertRowPlaceholders = [];
+            $insertParams          = [];
             foreach ($validatedItems as $vi) {
-                $ukId = $vi['ukuranId'];
-                $qty = $vi['qty'];
-                $hargaModal = $vi['hargaModal'];
-                $hargaJual = $vi['hargaJual'];
-                $ukuran = $vi['ukuran'];
+                $insertRowPlaceholders[] = '(?, ?, ?, ?, ?, ?, ?, ?, ?)';
+                array_push($insertParams,
+                    $vi['ukuranId'], $tanggalFormatted, $jenis,
+                    $vi['qty'], $vi['hargaModal'], $vi['hargaJual'],
+                    $keterangan, $ts, $ts
+                );
+            }
+            // prepare sekali, execute sekali (SQL bervariasi tergantung N)
+            $insertStmt = $db->prepare(
+                'INSERT INTO mutasi_stok (id_ukuran, tanggal, jenis, qty, harga_modal, harga_jual, keterangan, created_at, updated_at) VALUES '
+                . implode(', ', $insertRowPlaceholders)
+            );
+            $insertStmt->execute($insertParams);
 
-                $insertStmt = $db->prepare('INSERT INTO mutasi_stok (id_ukuran, tanggal, jenis, qty, harga_modal, harga_jual, keterangan, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $insertStmt->execute([$ukId, $tanggalFormatted, $jenis, $qty, $hargaModal, $hargaJual, $keterangan, $ts, $ts]);
-                $mutasiId = (int)$db->lastInsertId();
+            // SQLite AUTOINCREMENT berurutan dalam satu multi-row INSERT:
+            // lastInsertId() = ID baris terakhir, firstId = lastId - n + 1
+            $lastInsertedId  = (int)$db->lastInsertId();
+            $firstInsertedId = $lastInsertedId - $n + 1;
 
-                // Update stok
-                if ($jenis === 'masuk') {
-                    $stokStmt = $db->prepare('UPDATE ukuran SET stok = stok + ?, harga_modal = ?, harga_jual = ?, updated_at = ? WHERE id = ?');
-                    $stokStmt->execute([$qty, $hargaModal, $hargaJual, $ts, $ukId]);
-                } else {
-                    $stokStmt = $db->prepare('UPDATE ukuran SET stok = stok - ?, updated_at = ? WHERE id = ?');
-                    $stokStmt->execute([$qty, $ts, $ukId]);
-                    if ($hargaModal > 0 || $hargaJual > 0) {
-                        $priceStmt = $db->prepare('UPDATE ukuran SET harga_modal = CASE WHEN ? > 0 THEN ? ELSE harga_modal END, harga_jual = CASE WHEN ? > 0 THEN ? ELSE harga_jual END WHERE id = ?');
-                        $priceStmt->execute([$hargaModal, $hargaModal, $hargaJual, $hargaJual, $ukId]);
-                    }
+            // ── [QUERY 3] 1 CASE WHEN UPDATE — mengganti N UPDATE ────────────
+            $inIds          = array_column($validatedItems, 'ukuranId');
+            $inPlaceholders = implode(',', array_fill(0, $n, '?'));
+
+            if ($jenis === 'masuk') {
+                // UPDATE stok + harga_modal + harga_jual sekaligus
+                $caseStok  = implode(' ', array_map(fn($vi) => 'WHEN ? THEN stok + ?', $validatedItems));
+                $caseModal = implode(' ', array_map(fn($vi) => 'WHEN ? THEN ?', $validatedItems));
+                $caseJual  = implode(' ', array_map(fn($vi) => 'WHEN ? THEN ?', $validatedItems));
+
+                $updateParams = [];
+                foreach ($validatedItems as $vi) {
+                    array_push($updateParams, $vi['ukuranId'], $vi['qty']);
+                }
+                foreach ($validatedItems as $vi) {
+                    array_push($updateParams, $vi['ukuranId'], $vi['hargaModal']);
+                }
+                foreach ($validatedItems as $vi) {
+                    array_push($updateParams, $vi['ukuranId'], $vi['hargaJual']);
+                }
+                $updateParams[] = $ts;
+                foreach ($inIds as $id) {
+                    $updateParams[] = $id;
                 }
 
-                $namaLengkap = $ukuran['produk_nama'] . ' ' . $ukuran['merek'] . ' ' . $ukuran['ukuran'];
-                log_aktivitas('CREATE', 'mutasi-stok', $mutasiId, 'Mutasi stok ' . $jenis . ': ' . $namaLengkap . ' x' . $qty, [
-                    'produk' => $ukuran['produk_nama'],
-                    'merek' => $ukuran['merek'],
-                    'ukuran' => $ukuran['ukuran'],
-                    'jenis' => $jenis,
-                    'qty' => $qty,
-                    'harga_modal' => $hargaModal,
-                    'harga_jual' => $hargaJual,
-                    'tanggal' => $tanggalFormatted,
-                ]);
+                // prepare sekali, execute sekali (SQL bervariasi tergantung N)
+                $updateStmt = $db->prepare(
+                    "UPDATE ukuran SET
+                        stok        = CASE id {$caseStok}  END,
+                        harga_modal = CASE id {$caseModal} END,
+                        harga_jual  = CASE id {$caseJual}  END,
+                        updated_at  = ?
+                     WHERE id IN ({$inPlaceholders})"
+                );
+                $updateStmt->execute($updateParams);
+
+            } else {
+                // keluar: hanya UPDATE stok
+                $caseStok = implode(' ', array_map(fn($vi) => 'WHEN ? THEN stok - ?', $validatedItems));
+
+                $updateParams = [];
+                foreach ($validatedItems as $vi) {
+                    array_push($updateParams, $vi['ukuranId'], $vi['qty']);
+                }
+                $updateParams[] = $ts;
+                foreach ($inIds as $id) {
+                    $updateParams[] = $id;
+                }
+
+                // prepare sekali, execute sekali (SQL bervariasi tergantung N)
+                $updateStmt = $db->prepare(
+                    "UPDATE ukuran SET
+                        stok       = CASE id {$caseStok} END,
+                        updated_at = ?
+                     WHERE id IN ({$inPlaceholders})"
+                );
+                $updateStmt->execute($updateParams);
             }
 
             $db->commit();
 
-            $_SESSION['mutasi_keranjang'] = [];
-            $_SESSION['mutasi_jenis'] = '';
-            $_SESSION['mutasi_tanggal'] = '';
+            // ── [QUERY 4..3+N] log_aktivitas — tetap per item karena setiap
+            //    mutasi_stok punya id_referensi unik; ringan (INSERT tanpa JOIN).
+            //    Dipanggil DI LUAR transaksi agar rollback data tidak hilangkan log.
+            foreach ($validatedItems as $idx => $vi) {
+                $mutasiId    = $firstInsertedId + $idx;
+                $namaLengkap = $vi['ukuran']['produk_nama'] . ' ' . $vi['ukuran']['merek'] . ' ' . $vi['ukuran']['ukuran'];
+                log_aktivitas('CREATE', 'mutasi-stok', $mutasiId,
+                    'Mutasi stok ' . $jenis . ': ' . $namaLengkap . ' x' . $vi['qty'],
+                    [
+                        'produk'      => $vi['ukuran']['produk_nama'],
+                        'merek'       => $vi['ukuran']['merek'],
+                        'ukuran'      => $vi['ukuran']['ukuran'],
+                        'jenis'       => $jenis,
+                        'qty'         => $vi['qty'],
+                        'harga_modal' => $vi['hargaModal'],
+                        'harga_jual'  => $vi['hargaJual'],
+                        'tanggal'     => $tanggalFormatted,
+                    ]
+                );
+            }
+
+            $_SESSION['mutasi_keranjang']  = [];
+            $_SESSION['mutasi_jenis']      = '';
+            $_SESSION['mutasi_tanggal']    = '';
             $_SESSION['mutasi_keterangan'] = '';
 
-            set_flash('success', 'Berhasil menyimpan ' . count($validatedItems) . ' item mutasi stok ' . $jenis . '.');
+            set_flash('success', 'Berhasil menyimpan ' . $n . ' item mutasi stok ' . $jenis . '.');
             redirect('/mutasi-stok');
 
         } catch (\Exception $e) {

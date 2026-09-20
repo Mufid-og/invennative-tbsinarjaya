@@ -8,12 +8,12 @@ $search = trim($_GET['search'] ?? '');
 $where = '1=1';
 $params = [];
 
-if ($search !== '') {
-    $where .= ' AND (l.deskripsi LIKE ? OR l.modul LIKE ? OR l.aksi LIKE ?)';
-    $term = "%{$search}%";
-    $params[] = $term;
-    $params[] = $term;
-    $params[] = $term;
+require_once __DIR__ . '/../includes/search_helper.php';
+
+if ($search !== '' && search_min_length($search)) {
+    [$searchSql, $searchParams] = fts_search_log($search);
+    $where .= ' AND ' . $searchSql;
+    $params = array_merge($params, $searchParams);
 }
 
 $countSql = "SELECT COUNT(*) FROM log_aktivitas l WHERE {$where}";
@@ -77,6 +77,8 @@ ob_start();
             <form method="GET" action="/log-aktivitas" class="relative">
                 <input type="text" name="search" value="<?= e($search) ?>"
                        placeholder="Cari aktivitas..."
+                       minlength="2"
+                       title="Ketik minimal 2 karakter untuk mencari"
                        class="w-full pl-10 pr-4 py-2.5 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] transition bg-[#f7faff]">
                 <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5a6a7a] text-sm"></i>
                 <?php if ($search !== ''): ?>
@@ -84,6 +86,7 @@ ob_start();
                         <i class="bi bi-x-circle"></i>
                     </a>
                 <?php endif; ?>
+                <p class="mt-1 text-[11px] text-[#5a6a7a] pl-1">Ketik minimal 2 karakter untuk mencari</p>
             </form>
         </div>
 

@@ -7,6 +7,58 @@ $sampai = $_GET['sampai'] ?? date('Y-m-d');
 $dariTgl = $dari . ' 00:00:00';
 $sampaiTgl = $sampai . ' 23:59:59';
 
+// ===== Guard & streaming: hitung total baris detail dulu (1 angka) =====
+$countMut = db()->prepare('SELECT COUNT(*) FROM mutasi_stok WHERE deleted_at IS NULL AND tanggal BETWEEN ? AND ?');
+$countMut->execute([$dariTgl, $sampaiTgl]);
+$countVer = db()->prepare('SELECT COUNT(*) FROM verifikasi_stok WHERE deleted_at IS NULL AND tanggal BETWEEN ? AND ?');
+$countVer->execute([$dariTgl, $sampaiTgl]);
+$totalDetail = (int)$countMut->fetchColumn() + (int)$countVer->fetchColumn();
+unset($countMut, $countVer);
+
+// Peringatan bila periode lintas lebih dari 3 bulan
+$dariObj = new DateTime($dari);
+$sampaiObj = new DateTime($sampai);
+$selisih = $dariObj->diff($sampaiObj);
+$bulanPeriode = $selisih->y * 12 + $selisih->m;
+$warningPeriodeBesar = $bulanPeriode > 3;
+unset($dariObj, $sampaiObj, $selisih);
+
+// Konfirmasi bila data lebih dari 10.000 baris detail
+if ($totalDetail > 10000 && !isset($_GET['confirm'])) {
+    ?>
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Konfirmasi — Laporan Mutasi Stok</title>
+        <style>
+            * { margin:0; padding:0; box-sizing:border-box; }
+            body { font-family:'Segoe UI',Roboto,Arial,sans-serif; background:#eef2f7; color:#1a2332; }
+            .card { max-width:520px; margin:70px auto; background:#fff; border:1px solid #dce3ed; border-radius:12px; padding:28px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+            .card h2 { margin-top:0; font-size:18px; }
+            .card p { color:#5a6a7a; font-size:14px; line-height:1.6; }
+            .row { display:flex; gap:10px; margin-top:20px; }
+            .btn { border:0; border-radius:8px; padding:10px 16px; font-size:13px; font-weight:600; cursor:pointer; color:#fff; text-decoration:none; }
+            .btn-primary { background:#2c74b3; }
+            .btn-ghost { background:#c3cbd5; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h2>Data terlalu besar untuk dicetak</h2>
+            <p>Periode ini berisi <strong><?= number_format($totalDetail, 0, ',', '.') ?></strong> baris detail mutasi/verifikasi. Cetakan berskala besar akan berat. Pertimbangkan mempersempit periode (maksimal 3 bulan) sebelum mencetak.</p>
+            <div class="row">
+                <a class="btn btn-primary" href="?dari=<?= e(urlencode($dari)) ?>&sampai=<?= e(urlencode($sampai)) ?>&confirm=1">Lanjutkan Cetak</a>
+                <button class="btn btn-ghost" onclick="window.close()">Tutup</button>
+            </div>
+        </div>
+    </body>
+    </html>
+    <?php
+    exit;
+}
+
 function bulan_indonesia(int $bulan): string
 {
     $months = [
@@ -45,58 +97,37 @@ $rekapStmt = db()->prepare("
 $rekapStmt->execute([$dariTgl, $sampaiTgl]);
 $rekapRows = $rekapStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Detail mutasi (masuk/keluar)
-$detail = [];
-$stmt = db()->prepare("
-    SELECT ms.tanggal, ms.jenis, ms.qty, ms.harga_modal, ms.harga_jual, ms.keterangan,
-           p.nama as produk, me.merek, u.ukuran
-    FROM mutasi_stok ms
-    JOIN ukuran u ON u.id = ms.id_ukuran
-    JOIN merek me ON me.id = u.id_merek
-    JOIN produk p ON p.id = me.id_produk
-    WHERE ms.deleted_at IS NULL AND ms.tanggal BETWEEN ? AND ?
-");
-$stmt->execute([$dariTgl, $sampaiTgl]);
-foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-    $detail[] = [
-        'tanggal'      => $row['tanggal'],
-        'produk'       => $row['produk'] . ' ' . $row['merek'] . ' - ' . $row['ukuran'],
-        'tipe'         => $row['jenis'] === 'masuk' ? 'Masuk' : 'Keluar',
-        'qty'          => $row['qty'],
-        'selisih'      => null,
-        'harga_modal'  => $row['harga_modal'],
-        'harga_jual'   => $row['harga_jual'],
-        'keterangan'   => $row['keterangan'],
-    ];
-}
+// Detail mutasi (masuk/keluar) + verifikasi digabung & diurutkan di SQL,
+// lalu di-stream per baris (bukan fetchAll) supaya memori PHP konstan.
+$detailStmt = db()->prepare("
+    SELECT * FROM (
+        SELECT ms.tanggal,
+               p.nama || ' ' || me.merek || ' - ' || u.ukuran AS produk,
+               CASE ms.jenis WHEN 'masuk' THEN 'Masuk' ELSE 'Keluar' END AS tipe,
+               ms.qty, NULL AS selisih,
+               ms.harga_modal, ms.harga_jual, ms.keterangan
+        FROM mutasi_stok ms
+        JOIN ukuran u ON u.id = ms.id_ukuran
+        JOIN merek me ON me.id = u.id_merek
+        JOIN produk p ON p.id = me.id_produk
+        WHERE ms.deleted_at IS NULL AND ms.tanggal BETWEEN ? AND ?
 
-// Detail verifikasi stok
-$stmt = db()->prepare("
-    SELECT v.tanggal, v.selisih, v.keterangan,
-           p.nama as produk, me.merek, u.ukuran
-    FROM verifikasi_stok v
-    JOIN ukuran u ON u.id = v.id_ukuran
-    JOIN merek me ON me.id = u.id_merek
-    JOIN produk p ON p.id = me.id_produk
-    WHERE v.deleted_at IS NULL AND v.tanggal BETWEEN ? AND ?
-");
-$stmt->execute([$dariTgl, $sampaiTgl]);
-foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-    $detail[] = [
-        'tanggal'      => $row['tanggal'],
-        'produk'       => $row['produk'] . ' ' . $row['merek'] . ' - ' . $row['ukuran'],
-        'tipe'         => 'Verifikasi',
-        'qty'          => null,
-        'selisih'      => $row['selisih'],
-        'harga_modal'  => null,
-        'harga_jual'   => null,
-        'keterangan'   => $row['keterangan'],
-    ];
-}
+        UNION ALL
 
-usort($detail, function ($a, $b) {
-    return strcmp($a['tanggal'], $b['tanggal']);
-});
+        SELECT v.tanggal,
+               p.nama || ' ' || me.merek || ' - ' || u.ukuran AS produk,
+               'Verifikasi' AS tipe,
+               NULL, v.selisih,
+               NULL, NULL, v.keterangan
+        FROM verifikasi_stok v
+        JOIN ukuran u ON u.id = v.id_ukuran
+        JOIN merek me ON me.id = u.id_merek
+        JOIN produk p ON p.id = me.id_produk
+        WHERE v.deleted_at IS NULL AND v.tanggal BETWEEN ? AND ?
+    ) ORDER BY tanggal
+");
+$detailStmt->execute([$dariTgl, $sampaiTgl, $dariTgl, $sampaiTgl]);
+$detailStmt->setFetchMode(PDO::FETCH_ASSOC);
 
 // Rowspan grouping per produk & merek
 $rowCount = count($rekapRows);
@@ -165,6 +196,7 @@ $userName = $user['nama'] ?? '________';
         .green { color: #1a7a3a; }
         .red { color: #c0392b; }
         .empty { text-align: center; color: #5a6a7a; padding: 28px 12px; }
+        .warning-box { background:#fff7e6; border:1px solid #f0d390; color:#8a5b00; padding:10px 14px; border-radius:8px; font-size:13px; margin:0 0 16px; }
         .footer-print { display: flex; justify-content: space-between; margin-top: 36px; font-size: 13px; color: #5a6a7a; }
         .sign { text-align: center; }
         .sign-name { margin-top: 30px; font-weight: 600; color: #1a2332; }
@@ -200,6 +232,10 @@ $userName = $user['nama'] ?? '________';
                     <p><?= e(format_tanggal_kop($dari)) ?> — <?= e(format_tanggal_kop($sampai)) ?></p>
                 </div>
             </div>
+
+            <?php if ($warningPeriodeBesar): ?>
+                <div class="warning-box">Periode lebih dari 3 bulan — jumlah data bisa sangat banyak. Persempit periode agar proses cetak lebih ringan.</div>
+            <?php endif; ?>
 
             <h3>Rekap Per Produk - Ukuran</h3>
             <table>
@@ -253,10 +289,11 @@ $userName = $user['nama'] ?? '________';
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if (empty($detail)): ?>
-                        <tr><td colspan="8" class="empty">Tidak ada data pada periode ini.</td></tr>
-                    <?php else: ?>
-                        <?php foreach ($detail as $d): ?>
+                    <?php
+                    $detailCount = 0;
+                    while ($d = $detailStmt->fetch()):
+                        $detailCount++;
+                    ?>
                             <tr>
                                 <td><?= e(format_tanggal($d['tanggal'])) ?></td>
                                 <td><?= e($d['produk']) ?></td>
@@ -299,7 +336,9 @@ $userName = $user['nama'] ?? '________';
                                 </td>
                                 <td><?= e($d['keterangan']) ?></td>
                             </tr>
-                        <?php endforeach; ?>
+                        <?php endwhile; ?>
+                    <?php if ($detailCount === 0): ?>
+                        <tr><td colspan="8" class="empty">Tidak ada data pada periode ini.</td></tr>
                     <?php endif; ?>
                 </tbody>
             </table>

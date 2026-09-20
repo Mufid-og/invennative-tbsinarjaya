@@ -32,6 +32,8 @@ $keranjang = &$_SESSION['verifikasi_keranjang'];
 
 $search = trim($_GET['search'] ?? '');
 
+require_once __DIR__ . '/../includes/search_helper.php';
+
 $currentStep = 'produk';
 if (!empty($step['produk_id']) && empty($step['merek_id'])) {
     $currentStep = 'merek';
@@ -39,15 +41,49 @@ if (!empty($step['produk_id']) && empty($step['merek_id'])) {
     $currentStep = 'ukuran';
 }
 
-// Produk cards
+// Produk cards (dipaginasi 100/halaman + search SQL agar tidak tarik semua produk)
 $produkSearch = $currentStep === 'produk' ? $search : '';
-$produkStmt = $db->prepare(
-    'SELECT p.*, (SELECT COUNT(*) FROM merek m WHERE m.id_produk = p.id AND m.deleted_at IS NULL) as merek_count
-     FROM produk p WHERE p.deleted_at IS NULL' .
-    ($produkSearch !== '' ? ' AND p.nama LIKE ?' : '') .
-    ' ORDER BY p.nama'
-);
-$produkStmt->execute($produkSearch !== '' ? ['%' . $produkSearch . '%'] : []);
+$produkPerHalaman = 100;
+
+if ($produkSearch !== '' && search_min_length($produkSearch)) {
+    // Gunakan FTS5 / prefix search
+    [$produkSearchSql, $produkSearchParams] = fts_search_produk($produkSearch);
+    $countP = $db->prepare('SELECT COUNT(*) FROM produk p WHERE p.deleted_at IS NULL AND ' . $produkSearchSql);
+    $countP->execute($produkSearchParams);
+    $produkTotal = (int)$countP->fetchColumn();
+} else {
+    $produkTotal = (int)$db->query('SELECT COUNT(*) FROM produk WHERE deleted_at IS NULL')->fetchColumn();
+    $produkSearchSql = null;
+    $produkSearchParams = [];
+}
+$produkTotalPages = max(1, (int)ceil($produkTotal / $produkPerHalaman));
+$produkHalaman = max(1, min((int)($_GET['halaman'] ?? 1), $produkTotalPages));
+$produkOffset = ($produkHalaman - 1) * $produkPerHalaman;
+
+if ($produkSearchSql !== null) {
+    // Ada search: pakai FTS / prefix
+    // LEFT JOIN + COUNT(m.id) mengganti correlated subquery COUNT(*) per baris
+    // — filter deleted_at di ON clause agar produk tanpa merek aktif tetap muncul (COUNT=0)
+    $produkStmt = $db->prepare(
+        'SELECT p.*, COUNT(m.id) AS merek_count
+         FROM produk p
+         LEFT JOIN merek m ON m.id_produk = p.id AND m.deleted_at IS NULL
+         WHERE p.deleted_at IS NULL AND ' . $produkSearchSql .
+        ' GROUP BY p.id ORDER BY p.nama LIMIT ? OFFSET ?'
+    );
+    $produkStmt->execute(array_merge($produkSearchParams, [$produkPerHalaman, $produkOffset]));
+} else {
+    // prepare sekali, execute sekali — SQL tidak bervariasi di branch ini
+    // LEFT JOIN + COUNT(m.id) mengganti correlated subquery COUNT(*) per baris
+    $produkStmt = $db->prepare(
+        'SELECT p.*, COUNT(m.id) AS merek_count
+         FROM produk p
+         LEFT JOIN merek m ON m.id_produk = p.id AND m.deleted_at IS NULL
+         WHERE p.deleted_at IS NULL
+         GROUP BY p.id ORDER BY p.nama LIMIT ? OFFSET ?'
+    );
+    $produkStmt->execute([$produkPerHalaman, $produkOffset]);
+}
 $produkCards = $produkStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $produkTerpilih = null;
@@ -65,12 +101,21 @@ if (!empty($step['produk_id'])) {
 $merekCards = [];
 if (in_array($currentStep, ['merek', 'ukuran'])) {
     $merekSearch = $currentStep === 'merek' ? $search : '';
-    $merekSql = 'SELECT m.*, (SELECT COUNT(*) FROM ukuran u WHERE u.id_merek = m.id AND u.deleted_at IS NULL) as ukuran_count
-                 FROM merek m WHERE m.id_produk = ? AND m.deleted_at IS NULL' .
-                ($merekSearch !== '' ? ' AND m.merek LIKE ?' : '') .
-                ' ORDER BY m.merek';
+    $merekWhere = 'm.id_produk = ? AND m.deleted_at IS NULL';
+    $merekParams = [(int)$step['produk_id']];
+    if ($merekSearch !== '' && search_min_length($merekSearch)) {
+        [$merekSearchSql, $merekSearchParams] = fts_search_merek($merekSearch, (int)$step['produk_id']);
+        $merekWhere .= ' AND ' . $merekSearchSql;
+        $merekParams = array_merge($merekParams, $merekSearchParams);
+    }
+    // LEFT JOIN + COUNT(u.id) mengganti correlated subquery COUNT(*) per baris merek
+    // — filter deleted_at di ON clause agar merek tanpa ukuran aktif tetap muncul (COUNT=0)
+    $merekSql = 'SELECT m.*, COUNT(u.id) AS ukuran_count
+                 FROM merek m
+                 LEFT JOIN ukuran u ON u.id_merek = m.id AND u.deleted_at IS NULL
+                 WHERE ' . $merekWhere . ' GROUP BY m.id ORDER BY m.merek';
     $merekStmt = $db->prepare($merekSql);
-    $merekStmt->execute($merekSearch !== '' ? [(int)$step['produk_id'], '%' . $merekSearch . '%'] : [(int)$step['produk_id']]);
+    $merekStmt->execute($merekParams);
     $merekCards = $merekStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -89,28 +134,51 @@ if (!empty($step['merek_id'])) {
 $ukuranCards = [];
 if ($currentStep === 'ukuran') {
     $ukuranSearch = $search;
-    $ukuranSql = 'SELECT * FROM ukuran WHERE id_merek = ? AND deleted_at IS NULL' .
-                 ($ukuranSearch !== '' ? ' AND ukuran LIKE ?' : '') .
-                 ' ORDER BY ukuran';
+    $ukuranWhere = 'id_merek = ? AND deleted_at IS NULL';
+    $ukuranParams = [(int)$step['merek_id']];
+    if ($ukuranSearch !== '' && search_min_length($ukuranSearch)) {
+        [$ukuranSearchSql, $ukuranSearchParams] = fts_search_ukuran($ukuranSearch, (int)$step['merek_id']);
+        // Untuk prefix LIKE fallback, alias 'u' tidak tersedia — sesuaikan
+        // Ganti alias 'u.' jika ada (fts_search_ukuran menghasilkan "u.id IN ..." atau "u.ukuran LIKE ...")
+        $ukuranSearchSqlNoAlias = str_replace('u.id IN ', 'id IN ', str_replace('u.ukuran LIKE', 'ukuran LIKE', $ukuranSearchSql));
+        $ukuranWhere .= ' AND ' . $ukuranSearchSqlNoAlias;
+        $ukuranParams = array_merge($ukuranParams, $ukuranSearchParams);
+    }
+    $ukuranSql = 'SELECT * FROM ukuran WHERE ' . $ukuranWhere . ' ORDER BY ukuran';
     $ukuranStmt = $db->prepare($ukuranSql);
-    $ukuranStmt->execute($ukuranSearch !== '' ? [(int)$step['merek_id'], '%' . $ukuranSearch . '%'] : [(int)$step['merek_id']]);
+    $ukuranStmt->execute($ukuranParams);
     $ukuranCards = $ukuranStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 $detailKeranjang = [];
-foreach ($keranjang as $ukuranId => $item) {
-    $stmtU = $db->prepare('SELECT u.*, m.merek, p.nama as produk_nama FROM ukuran u JOIN merek m ON m.id = u.id_merek JOIN produk p ON p.id = m.id_produk WHERE u.id = ?');
-    $stmtU->execute([$ukuranId]);
-    $ukuranRow = $stmtU->fetch(PDO::FETCH_ASSOC);
-    if ($ukuranRow) {
+if (!empty($keranjang)) {
+    // ── Batch load: 1 query WHERE IN mengganti N SELECT per item keranjang ──
+    $keranjangIds = array_keys($keranjang);
+    $kPh          = implode(',', array_fill(0, count($keranjangIds), '?'));
+    $kStmt        = $db->prepare(
+        "SELECT u.*, m.merek, p.nama AS produk_nama
+         FROM ukuran u
+         JOIN merek m ON m.id = u.id_merek
+         JOIN produk p ON p.id = m.id_produk
+         WHERE u.id IN ({$kPh})"
+    );
+    $kStmt->execute($keranjangIds);
+    $ukuranRows = [];
+    while ($r = $kStmt->fetch(PDO::FETCH_ASSOC)) {
+        $ukuranRows[(int)$r['id']] = $r;
+    }
+
+    foreach ($keranjang as $ukuranId => $item) {
+        $ukuranRow = $ukuranRows[(int)$ukuranId] ?? null;
+        if (!$ukuranRow) continue;
         $stokSistem = (float)$ukuranRow['stok'];
-        $stokFisik = isset($item['stokFisik']) ? (float)$item['stokFisik'] : $stokSistem;
+        $stokFisik  = isset($item['stokFisik']) ? (float)$item['stokFisik'] : $stokSistem;
         $detailKeranjang[] = [
-            'id' => $ukuranId,
-            'nama' => $ukuranRow['produk_nama'] . ' ' . $ukuranRow['merek'] . ' — ' . $ukuranRow['ukuran'],
+            'id'         => $ukuranId,
+            'nama'       => $ukuranRow['produk_nama'] . ' ' . $ukuranRow['merek'] . ' — ' . $ukuranRow['ukuran'],
             'stokSistem' => $stokSistem,
-            'stokFisik' => $stokFisik,
-            'selisih' => $stokFisik - $stokSistem,
+            'stokFisik'  => $stokFisik,
+            'selisih'    => $stokFisik - $stokSistem,
         ];
     }
 }
@@ -147,6 +215,8 @@ ob_start();
                 <i class="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-[#5a6a7a] z-10"></i>
                 <input type="text" name="search" value="<?= e($search) ?>"
                        placeholder="Cari <?= $currentStep === 'ukuran' ? 'ukuran' : ($currentStep === 'merek' ? 'merek' : 'produk') ?>..."
+                       minlength="2"
+                       title="Ketik minimal 2 karakter untuk mencari"
                        class="w-full pl-10 pr-10 py-2.5 border border-[#c9cbd3] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2c74b3]">
                 <?php if ($search !== ''): ?>
                     <a href="/verifikasi-stok/input?<?= $currentStep === 'merek' ? 'step=merek&produk_id=' . (int)$step['produk_id'] : ($currentStep === 'ukuran' ? 'step=ukuran&produk_id=' . (int)$step['produk_id'] . '&merek_id=' . (int)$step['merek_id'] : '') ?>"
@@ -213,6 +283,25 @@ ob_start();
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </div>
+                    <?php if ($produkTotalPages > 1): ?>
+                        <div class="mt-4 flex items-center justify-between gap-3 text-[13px] text-[#5a6a7a]">
+                            <span>Menampilkan <?= $produkTotal > 0 ? (($produkHalaman - 1) * $produkPerHalaman + 1) : 0 ?>–<?= min($produkHalaman * $produkPerHalaman, $produkTotal) ?> dari <?= $produkTotal ?> produk</span>
+                            <span class="flex items-center gap-2">
+                                <?php if ($produkHalaman > 1): ?>
+                                    <a href="/verifikasi-stok/input?step=produk&search=<?= e(urlencode($search)) ?>&halaman=<?= $produkHalaman - 1 ?>"
+                                       class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#dce3ed] bg-white hover:border-[#2c74b3] hover:text-[#2c74b3] transition">
+                                        <i class="bi bi-chevron-left"></i> Sebelumnya
+                                    </a>
+                                <?php endif; ?>
+                                <?php if ($produkHalaman < $produkTotalPages): ?>
+                                    <a href="/verifikasi-stok/input?step=produk&search=<?= e(urlencode($search)) ?>&halaman=<?= $produkHalaman + 1 ?>"
+                                       class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#dce3ed] bg-white hover:border-[#2c74b3] hover:text-[#2c74b3] transition">
+                                        Selanjutnya <i class="bi bi-chevron-right"></i>
+                                    </a>
+                                <?php endif; ?>
+                            </span>
+                        </div>
+                    <?php endif; ?>
                 </div>
 
             <?php elseif ($currentStep === 'merek'): ?>

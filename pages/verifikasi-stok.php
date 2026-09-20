@@ -14,15 +14,17 @@ $search = trim($_GET['search'] ?? '');
 $where = 'v.deleted_at IS NULL';
 $params = [];
 
-if ($search !== '') {
-    $conditions = [];
-    $conditions[] = '(p.nama LIKE ? OR me.merek LIKE ? OR u.ukuran LIKE ? OR v.keterangan LIKE ?)';
-    $term = "%{$search}%";
-    $params[] = $term;
-    $params[] = $term;
-    $params[] = $term;
-    $params[] = $term;
+require_once __DIR__ . '/../includes/search_helper.php';
 
+if ($search !== '' && search_min_length($search)) {
+    $conditions = [];
+
+    // FTS5 / prefix LIKE — mencari di produk, merek, ukuran, dan keterangan sekaligus
+    [$searchSql, $searchParams] = fts_search_stok($search, 'verifikasi', 'v');
+    $conditions[] = $searchSql;
+    $params = array_merge($params, $searchParams);
+
+    // Pencarian tanggal via nama bulan Indonesia
     $dateResult = indonesian_month_search($search, 'v');
     if (!empty($dateResult['conditions'])) {
         foreach ($dateResult['conditions'] as $dc) {
@@ -117,6 +119,8 @@ ob_start();
             <form method="GET" action="/verifikasi-stok" class="relative">
                 <input type="text" name="search" value="<?= e($search) ?>"
                        placeholder="Cari produk / merek / ukuran / tanggal"
+                       minlength="2"
+                       title="Ketik minimal 2 karakter untuk mencari"
                        class="w-full pl-10 pr-4 py-2.5 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] transition bg-[#f7faff]">
                 <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5a6a7a] text-sm"></i>
                 <?php if ($search !== ''): ?>
@@ -124,6 +128,7 @@ ob_start();
                         <i class="bi bi-x-circle"></i>
                     </a>
                 <?php endif; ?>
+                <p class="mt-1 text-[11px] text-[#5a6a7a] pl-1">Ketik minimal 2 karakter untuk mencari</p>
             </form>
         </div>
 

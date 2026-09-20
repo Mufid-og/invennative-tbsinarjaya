@@ -7,7 +7,6 @@ $pageTitle = $pageTitle ?? 'Inventaris - Toko Bangunan';
 $user = auth_user();
 $initials = $user ? avatar_initials($user['nama']) : 'A';
 
-$produkCount = (int)db()->query('SELECT COUNT(*) FROM produk WHERE deleted_at IS NULL')->fetchColumn();
 $fullUri = $_SERVER['REQUEST_URI'];
 ?>
 <!DOCTYPE html>
@@ -75,7 +74,6 @@ $fullUri = $_SERVER['REQUEST_URI'];
                 class="flex items-center gap-3 px-4 py-3 rounded-lg mb-0.5 text-sm font-medium transition text-white/65 hover:bg-white/[0.08] hover:text-white <?= $activeMenu === 'produk' ? 'bg-white/[0.12] text-white shadow-[inset_3px_0_0_#a8d0f0]' : '' ?>"
                 style="margin-bottom:2px">
                 <i class="bi bi-box-seam text-lg w-5 text-center"></i> Manajemen Produk
-                <span class="ml-auto bg-[#2c74b3] text-white text-[11px] font-semibold px-2 py-0.5 rounded-full"><?= $produkCount ?></span>
             </a>
 
             <a href="/mutasi-stok"
