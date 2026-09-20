@@ -282,6 +282,10 @@ switch ($action) {
 
             $db->commit();
 
+            // Invalidasi dashboard cache: stok berubah (stats) + data mutasi baru (charts)
+            require_once __DIR__ . '/../includes/dashboard_cache.php';
+            dashboard_cache_invalidate('dashboard_stats', 'dashboard_charts');
+
             // ── [QUERY 4..3+N] log_aktivitas — tetap per item karena setiap
             //    mutasi_stok punya id_referensi unik; ringan (INSERT tanpa JOIN).
             //    Dipanggil DI LUAR transaksi agar rollback data tidak hilangkan log.

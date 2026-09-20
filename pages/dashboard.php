@@ -1,65 +1,155 @@
 <?php
 // pages/dashboard.php
 $headerTitle = 'Dashboard';
-$breadcrumb = 'Dashboard';
-$activeMenu = 'dashboard';
-$pageTitle = 'Dashboard - Inventaris Toko Bangunan';
+$breadcrumb  = 'Dashboard';
+$activeMenu  = 'dashboard';
+$pageTitle   = 'Dashboard - Inventaris Toko Bangunan';
 
 $db = db();
+require_once __DIR__ . '/../includes/dashboard_cache.php';
 
-$totalProduk = (int)$db->query('SELECT COUNT(*) FROM produk WHERE deleted_at IS NULL')->fetchColumn();
-$totalUkuran = (int)$db->query('SELECT COUNT(*) FROM ukuran WHERE deleted_at IS NULL')->fetchColumn();
-$stokMenipis = (int)$db->query('SELECT COUNT(*) FROM ukuran WHERE deleted_at IS NULL AND stok > 0 AND stok <= 5')->fetchColumn();
-$stokHabis = (int)$db->query('SELECT COUNT(*) FROM ukuran WHERE deleted_at IS NULL AND stok <= 0')->fetchColumn();
+$dashboardCacheHasKeys = static function (?array $cache, array $keys): bool {
+    if ($cache === null) {
+        return false;
+    }
+    foreach ($keys as $key) {
+        if (!array_key_exists($key, $cache)) {
+            return false;
+        }
+    }
+    return true;
+};
 
-$charts = [];
-$awal = (new DateTime())->modify('first day of this month')->modify('-5 months');
-for ($i = 0; $i < 6; $i++) {
-    $m = (clone $awal)->modify("+{$i} months");
-    $charts[] = [
-        'key'   => $m->format('Y-m'),
-        'label' => $m->format('F Y'),
-        'masuk' => 0,
-        'keluar' => 0,
+// ── [CACHE] dashboard_stats: totalProduk, totalUkuran, stokMenipis, stokHabis ──
+// Diinvalidasi oleh: mutasi simpan, verifikasi simpan, produk/ukuran/merek CRUD.
+$stats = dashboard_cache_get('dashboard_stats');
+$statsKeys = ['totalProduk', 'totalUkuran', 'stokMenipis', 'stokHabis'];
+if (!$dashboardCacheHasKeys($stats, $statsKeys)) {
+    $stats = null;
+} else {
+    foreach ($statsKeys as $key) {
+        if (!is_numeric($stats[$key])) {
+            $stats = null;
+            break;
+        }
+    }
+}
+if ($stats === null) {
+    // Cache miss — query database, tulis ke cache
+    $stats = [
+        'totalProduk' => (int)$db->query('SELECT COUNT(*) FROM produk WHERE deleted_at IS NULL')->fetchColumn(),
+        'totalUkuran' => (int)$db->query('SELECT COUNT(*) FROM ukuran WHERE deleted_at IS NULL')->fetchColumn(),
+        'stokMenipis' => (int)$db->query('SELECT COUNT(*) FROM ukuran WHERE deleted_at IS NULL AND stok > 0 AND stok <= 5')->fetchColumn(),
+        'stokHabis'   => (int)$db->query('SELECT COUNT(*) FROM ukuran WHERE deleted_at IS NULL AND stok <= 0')->fetchColumn(),
     ];
+    dashboard_cache_set('dashboard_stats', $stats);
+}
+$totalProduk = (int)$stats['totalProduk'];
+$totalUkuran = (int)$stats['totalUkuran'];
+$stokMenipis = (int)$stats['stokMenipis'];
+$stokHabis   = (int)$stats['stokHabis'];
+
+// ── [CACHE] dashboard_charts: data chart mutasi 6 bulan ──────────────────────
+// Diinvalidasi oleh: mutasi simpan (satu-satunya yang mengubah chart).
+$chartsCache = dashboard_cache_get('dashboard_charts');
+$chartsKeys = ['charts', 'totalMutasi', 'tertinggi'];
+if (
+    !$dashboardCacheHasKeys($chartsCache, $chartsKeys)
+    || !is_array($chartsCache['charts'])
+    || !is_numeric($chartsCache['totalMutasi'])
+    || !is_numeric($chartsCache['tertinggi'])
+    || (float)$chartsCache['tertinggi'] <= 0
+) {
+    $chartsCache = null;
+}
+if ($chartsCache !== null) {
+    foreach ($chartsCache['charts'] as $chartRow) {
+        if (
+            !is_array($chartRow)
+            || !$dashboardCacheHasKeys($chartRow, ['key', 'label', 'masuk', 'keluar'])
+            || !is_numeric($chartRow['masuk'])
+            || !is_numeric($chartRow['keluar'])
+        ) {
+            $chartsCache = null;
+            break;
+        }
+    }
+}
+if ($chartsCache === null) {
+    // Cache miss — build struktur bulan dulu
+    $charts = [];
+    $awal   = (new DateTime())->modify('first day of this month')->modify('-5 months');
+    for ($i = 0; $i < 6; $i++) {
+        $m        = (clone $awal)->modify("+{$i} months");
+        $charts[] = [
+            'key'    => $m->format('Y-m'),
+            'label'  => $m->format('F Y'),
+            'masuk'  => 0,
+            'keluar' => 0,
+        ];
+    }
+
+    // Agregasi langsung di SQL per bulan+jenis (maks 12 baris)
+    $startDate = (clone $awal)->format('Y-m-d 00:00:00');
+    $endDate   = date('Y-m-d 23:59:59');
+    $stmtMut   = $db->prepare("
+        SELECT substr(tanggal, 1, 7) AS bulan, jenis, SUM(qty) AS total
+        FROM mutasi_stok
+        WHERE deleted_at IS NULL AND tanggal >= ? AND tanggal <= ?
+        GROUP BY substr(tanggal, 1, 7), jenis
+    ");
+    $stmtMut->execute([$startDate, $endDate]);
+
+    $agregat = [];
+    while ($r = $stmtMut->fetch(PDO::FETCH_ASSOC)) {
+        $agregat[$r['bulan']][$r['jenis']] = (float)$r['total'];
+    }
+
+    foreach ($charts as &$c) {
+        $c['masuk']  = $agregat[$c['key']]['masuk']  ?? 0;
+        $c['keluar'] = $agregat[$c['key']]['keluar'] ?? 0;
+    }
+    unset($c);
+
+    $tertinggi   = 1;
+    foreach ($charts as $c) {
+        $tertinggi = max($tertinggi, $c['masuk'], $c['keluar']);
+    }
+    $totalMutasi = array_sum(array_map(fn($c) => $c['masuk'] + $c['keluar'], $charts));
+
+    dashboard_cache_set('dashboard_charts', [
+        'charts'      => $charts,
+        'totalMutasi' => $totalMutasi,
+        'tertinggi'   => $tertinggi,
+    ]);
+} else {
+    // Cache hit
+    $charts      = array_map(static fn(array $chart): array => [
+        'key'    => (string)$chart['key'],
+        'label'  => (string)$chart['label'],
+        'masuk'  => (float)$chart['masuk'],
+        'keluar' => (float)$chart['keluar'],
+    ], $chartsCache['charts']);
+    $totalMutasi = (float)$chartsCache['totalMutasi'];
+    $tertinggi   = (float)$chartsCache['tertinggi'];
 }
 
-// Agregasi langsung di SQL per bulan+jenis (maks 12 baris), bukan fetch semua baris
-$startDate = (clone $awal)->format('Y-m-d 00:00:00');
-$endDate = date('Y-m-d 23:59:59');
-$stmtMut = $db->prepare("
-    SELECT substr(tanggal, 1, 7) AS bulan, jenis, SUM(qty) AS total
-    FROM mutasi_stok
-    WHERE deleted_at IS NULL AND tanggal >= ? AND tanggal <= ?
-    GROUP BY substr(tanggal, 1, 7), jenis
-");
-$stmtMut->execute([$startDate, $endDate]);
-
-$agregat = [];
-while ($r = $stmtMut->fetch(PDO::FETCH_ASSOC)) {
-    $agregat[$r['bulan']][$r['jenis']] = (float)$r['total'];
-}
-
-foreach ($charts as &$c) {
-    $c['masuk']  = $agregat[$c['key']]['masuk']  ?? 0;
-    $c['keluar'] = $agregat[$c['key']]['keluar'] ?? 0;
-}
-unset($c);
-
-$tertinggi = 1;
-foreach ($charts as $c) {
-    $tertinggi = max($tertinggi, $c['masuk'], $c['keluar']);
-}
 $maxBar = 160;
-$totalMutasi = array_sum(array_map(fn($c) => $c['masuk'] + $c['keluar'], $charts));
 
-// Stok menipis paginated
-$page = max(1, (int)($_GET['menipis_page'] ?? 1));
-$perPage = 15;
-$countMenipis = (int)$db->query('SELECT COUNT(*) FROM ukuran WHERE deleted_at IS NULL AND stok <= 5')->fetchColumn();
-$totalPages = max(1, (int)ceil($countMenipis / $perPage));
-$page = min($page, $totalPages);
-$offset = ($page - 1) * $perPage;
+// ── Stok menipis list: TIDAK di-cache karena ada paginasi GET param ───────────
+// Count uses the same joined dataset as the paginated list.
+$page         = max(1, (int)($_GET['menipis_page'] ?? 1));
+$perPage      = 15;
+$countMenipis = (int)$db->query('
+    SELECT COUNT(*)
+    FROM ukuran u
+    JOIN merek m ON m.id = u.id_merek AND m.deleted_at IS NULL
+    JOIN produk p ON p.id = m.id_produk AND p.deleted_at IS NULL
+    WHERE u.deleted_at IS NULL AND u.stok <= 5
+')->fetchColumn();
+$totalPages   = max(1, (int)ceil($countMenipis / $perPage));
+$page         = min($page, $totalPages);
+$offset       = ($page - 1) * $perPage;
 
 $stmtMenipis = $db->prepare('
     SELECT u.*, m.merek, p.nama as produk_nama
@@ -74,16 +164,16 @@ $stmtMenipis->execute([$perPage, $offset]);
 $stokMenipisList = $stmtMenipis->fetchAll(PDO::FETCH_ASSOC);
 
 $paginationMenipis = [
-    'rows' => $stokMenipisList,
-    'total' => $countMenipis,
-    'page' => $page,
-    'perPage' => $perPage,
+    'rows'      => $stokMenipisList,
+    'total'     => $countMenipis,
+    'page'      => $page,
+    'perPage'   => $perPage,
     'totalPages' => $totalPages,
-    'hasPages' => $totalPages > 1,
-    'hasPrev' => $page > 1,
-    'hasNext' => $page < $totalPages,
+    'hasPages'  => $totalPages > 1,
+    'hasPrev'   => $page > 1,
+    'hasNext'   => $page < $totalPages,
     'firstItem' => $countMenipis > 0 ? ($page - 1) * $perPage + 1 : 0,
-    'lastItem' => min($page * $perPage, $countMenipis),
+    'lastItem'  => min($page * $perPage, $countMenipis),
 ];
 
 $paginationBaseUrl = '/dashboard';

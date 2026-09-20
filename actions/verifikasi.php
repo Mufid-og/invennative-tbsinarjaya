@@ -215,6 +215,10 @@ if ($action === 'simpan') {
 
         $db->commit();
 
+        // Invalidasi dashboard cache: stok berubah setelah verifikasi
+        require_once __DIR__ . '/../includes/dashboard_cache.php';
+        dashboard_cache_invalidate('dashboard_stats');
+
         // ── [QUERY 4] 1 log_aktivitas — sudah benar, di luar transaksi & loop ─
         log_aktivitas('CREATE', 'verifikasi-stok', null,
             "Verifikasi stok {$tanggal} sebanyak {$n} item",

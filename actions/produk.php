@@ -11,6 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $action = $_POST['action'] ?? '';
 $db = db();
+require_once __DIR__ . '/../includes/dashboard_cache.php';
 
 function produk_url(?int $produkId = null, ?int $merekId = null, string $search = '', int $page = 0): string
 {
@@ -69,6 +70,8 @@ switch ($action) {
             $newId = (int)$db->lastInsertId();
             log_aktivitas('CREATE', 'produk', $newId, "Produk baru \"{$nama}\" ditambahkan", ['sebelum' => [], 'sesudah' => ['nama' => $nama]]);
             set_flash('success', 'Data produk berhasil ditambahkan.');
+            // Produk baru → totalProduk bertambah
+            dashboard_cache_invalidate('dashboard_stats');
         }
         redirect(produk_url());
 
@@ -104,6 +107,8 @@ switch ($action) {
         }
         log_aktivitas('DELETE', 'produk', $produkId, "Produk \"{$produk['nama']}\" beserta merek & ukuran dihapus", null);
         set_flash('success', 'Produk beserta merek & ukurannya berhasil dihapus.');
+        // Hapus produk → totalProduk & totalUkuran berkurang, stok menipis bisa berubah
+        dashboard_cache_invalidate('dashboard_stats');
         redirect('/produk');
 
     case 'simpan_merek':
@@ -158,6 +163,8 @@ switch ($action) {
         }
         log_aktivitas('DELETE', 'merek', $merekId, "Merek \"{$merek['merek']}\" beserta ukurannya dihapus", null);
         set_flash('success', 'Merek beserta ukurannya berhasil dihapus.');
+        // Hapus merek → totalUkuran berkurang, stok menipis bisa berubah
+        dashboard_cache_invalidate('dashboard_stats');
         redirect(produk_url((int)$merek['id_produk']));
 
     case 'simpan_ukuran':
@@ -205,6 +212,7 @@ switch ($action) {
             $newId = (int)$db->lastInsertId();
             log_aktivitas('CREATE', 'ukuran', $newId, "Ukuran baru \"{$namaUkuran}\" ditambahkan", ['sebelum' => [], 'sesudah' => ['ukuran' => $namaUkuran, 'stok' => $stok, 'harga_modal' => $hargaModal, 'harga_jual' => $hargaJual]]);
             set_flash('success', 'Data ukuran berhasil ditambahkan.');
+            dashboard_cache_invalidate('dashboard_stats');
         }
         redirect(produk_url(merek_produk_id($idMerek), $idMerek, get_input('search'), (int)($_POST['page'] ?? 0)));
 
@@ -221,6 +229,7 @@ switch ($action) {
         $db->prepare('UPDATE ukuran SET deleted_at = ?, updated_at = ? WHERE id = ?')->execute([$ts, $ts, $ukuranId]);
         log_aktivitas('DELETE', 'ukuran', $ukuranId, "Ukuran \"{$ukuran['ukuran']}\" dihapus", null);
         set_flash('success', 'Data ukuran berhasil dihapus.');
+        dashboard_cache_invalidate('dashboard_stats');
         redirect(produk_url(merek_produk_id((int)$ukuran['id_merek']), (int)$ukuran['id_merek'], get_input('search'), (int)($_POST['page'] ?? 0)));
 
     default:
