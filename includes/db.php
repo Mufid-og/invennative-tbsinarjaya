@@ -31,6 +31,28 @@ if (!is_file($dbPath)) {
 
 function db(): PDO
 {
-    global $db;
-    return $db;
+    if (empty($GLOBALS['__pdo_singleton'])) {
+        $config = require __DIR__ . '/../config/database.php';
+        $pdo = new PDO('sqlite:' . $config['path']);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        $pdo->exec('PRAGMA journal_mode = WAL');
+        $pdo->exec('PRAGMA synchronous = NORMAL');
+        $pdo->exec('PRAGMA busy_timeout = 5000');
+        $pdo->exec('PRAGMA foreign_keys = ON');
+        $GLOBALS['__pdo_singleton'] = $pdo;
+    }
+    return $GLOBALS['__pdo_singleton'];
+}
+
+function close_db(): void
+{
+    if (!empty($GLOBALS['__pdo_singleton'])) {
+        try {
+            $GLOBALS['__pdo_singleton']->exec('PRAGMA wal_checkpoint(TRUNCATE)');
+        } catch (Throwable $e) {
+            // Abaikan — koneksi akan ditutup paksa
+        }
+        $GLOBALS['__pdo_singleton'] = null;
+    }
 }

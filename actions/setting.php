@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aksi = $_POST['aksi'] ?? '';
 
     if ($aksi === 'restore') {
+        // ---- Validasi file upload ----
         if (!isset($_FILES['file_restore']) || $_FILES['file_restore']['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($_FILES['file_restore']['tmp_name'])) {
             set_flash('error', 'Pilih file database (.sqlite/.db) terlebih dahulu.');
             redirect('/setting');
@@ -36,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $tmpFile = $_FILES['file_restore']['tmp_name'];
 
+        // ---- Validasi header SQLite ----
         $handle = fopen($tmpFile, 'rb');
         $header = fread($handle, 16);
         fclose($handle);
@@ -45,18 +47,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('/setting');
         }
 
-        log_aktivitas('RESTORE', 'backup', null, "Restore database dari: " . $_FILES['file_restore']['name']);
+        // ---- Validasi integritas file SEBELUM dipakai ----
+        try {
+            $checkPdo = new PDO('sqlite:' . $tmpFile);
+            $checkPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $result = $checkPdo->query('PRAGMA integrity_check')->fetchColumn();
+            $checkPdo = null;
 
-        $db = null;
+            if (strtolower((string)$result) !== 'ok') {
+                set_flash('error', 'File backup rusak (integrity_check: ' . $result . ').');
+                redirect('/setting');
+            }
+        } catch (Throwable $e) {
+            set_flash('error', 'Gagal memeriksa file backup: ' . $e->getMessage());
+            redirect('/setting');
+        }
 
-        copy($dbPath, $dbPath . '.bak');
+        // ---- Catat log SEBELUM menimpa DB ----
+        log_aktivitas('RESTORE', 'backup', null, 'Restore database dari: ' . $_FILES['file_restore']['name']);
 
+        // ---- Tutup koneksi PDO yang sedang aktif ----
+        close_db();
+
+        // ---- Hapus file WAL / SHM / journal LAMA ----
+        // Ini kunci utama: tanpa langkah ini, file DB baru akan malformed
+        // karena SQLite mencoba menerapkan WAL lama ke file utama baru.
+        foreach ([$dbPath . '-wal', $dbPath . '-shm', $dbPath . '-journal'] as $f) {
+            if (is_file($f)) {
+                @unlink($f);
+            }
+        }
+
+        // ---- Backup file DB yang sekarang sebagai .bak ----
+        if (is_file($dbPath)) {
+            copy($dbPath, $dbPath . '.bak');
+        }
+
+        // ---- Timpa file utama dengan file backup yang di-upload ----
         if (!move_uploaded_file($tmpFile, $dbPath)) {
             set_flash('error', 'Gagal menimpa file database.');
             redirect('/setting');
         }
 
-        set_flash('success', 'Database berhasil dipulihkan.');
+        // ---- Hapus WAL/SHM lagi, jaga-jaga kalau ada yang dibuat oleh SQLite saat copy ----
+        foreach ([$dbPath . '-wal', $dbPath . '-shm', $dbPath . '-journal'] as $f) {
+            if (is_file($f)) {
+                @unlink($f);
+            }
+        }
+
+        // ---- Pastikan hak akses file OK (khusus Windows) ----
+        @chmod($dbPath, 0666);
+
+        set_flash('success', 'Database berhasil dipulihkan. File WAL lama sudah dibersihkan.');
         redirect('/dashboard');
     }
 
@@ -101,6 +144,18 @@ function handle_update_app(): void
         redirect('/setting');
     }
 
+    $excludeDirs = ['tools/', 'node_modules/', '.git/', 'storage/', 'database/'];
+    $isExcluded = function (string $rel) use ($excludeDirs): bool {
+        $rel = ltrim($rel, '/');
+        foreach ($excludeDirs as $dir) {
+            $d = rtrim($dir, '/');
+            if ($rel === $d || str_starts_with($rel, $d . '/')) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     if (!class_exists('ZipArchive')) {
         set_flash('error', 'Ekstensi php-zip tidak tersedia. Aktifkan terlebih dahulu.');
         redirect('/setting');
@@ -133,7 +188,7 @@ function handle_update_app(): void
         set_flash('error', 'File ZIP kosong.');
         redirect('/setting');
     }
-    if ($totalEntries > 5000) {
+    if ($totalEntries > 50000) {
         $zip->close();
         set_flash('error', 'Terlalu banyak file dalam ZIP.');
         redirect('/setting');
@@ -141,7 +196,18 @@ function handle_update_app(): void
 
     for ($i = 0; $i < $totalEntries; $i++) {
         $stat = $zip->statIndex($i);
-        $totalUncompressed += (int)($stat['size'] ?? 0);
+        $name = $normalizeZipName((string)($stat['name'] ?? ''));
+
+        if (
+            $name !== '' &&
+            $name !== $rootFolder &&
+            str_starts_with($name, $rootFolder . '/')
+        ) {
+            $rel = substr($name, strlen($rootFolder) + 1);
+            if ($rel !== '' && !str_ends_with($rel, '/') && !$isExcluded($rel)) {
+                $totalUncompressed += (int)($stat['size'] ?? 0);
+            }
+        }
     }
 
     if ($totalUncompressed > 209715200) {
@@ -235,11 +301,7 @@ function handle_update_app(): void
         if ($relName === '' || str_ends_with($relName, '/')) {
             continue;
         }
-        if (str_starts_with($relName, 'database/') || in_array($relName, ['database', 'database/'], true)) {
-            continue;
-        }
-
-        if (str_starts_with($relName, 'storage/')) {
+        if ($isExcluded($relName)) {
             continue;
         }
 
