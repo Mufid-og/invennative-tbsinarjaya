@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/migrations.php';
+
 $config = require __DIR__ . '/../config/database.php';
 $dbPath = $config['path'];
 
@@ -18,6 +20,8 @@ if (!is_file($dbPath)) {
     $db->exec('PRAGMA foreign_keys = ON');
     $db->exec($schema);
     $db->exec($seed);
+    // Lengkapi DB baru dengan objek post-schema (FTS5, ukuran_numeric, dst).
+    migrations_run($db);
 } else {
     $db = new PDO('sqlite:' . $dbPath);
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -27,6 +31,9 @@ if (!is_file($dbPath)) {
     $db->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     $db->exec('PRAGMA journal_mode = WAL');
     $db->exec('PRAGMA foreign_keys = ON');
+    // Auto-heal: hasil restore backup lama / DB versi lama akan dikoreksi
+    // otomatis ke struktur terbaru sesuai PRAGMA user_version.
+    migrations_run($db);
 }
 
 function db(): PDO
@@ -41,6 +48,8 @@ function db(): PDO
         $pdo->exec('PRAGMA busy_timeout = 5000');
         $pdo->exec('PRAGMA foreign_keys = ON');
         $GLOBALS['__pdo_singleton'] = $pdo;
+        // Auto-heal schema bila file DB berasal dari backup/versi lama.
+        migrations_run($pdo);
     }
     return $GLOBALS['__pdo_singleton'];
 }

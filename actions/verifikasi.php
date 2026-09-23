@@ -85,6 +85,8 @@ if ($action === 'update_stok_fisik') {
         $_SESSION['verifikasi_keranjang'][$ukuranId]['stokFisik'] = $stokFisik;
     }
 
+
+
     redirect('/verifikasi-stok/input');
 }
 
@@ -167,11 +169,17 @@ if ($action === 'simpan') {
         $selisih    = $stokFisik - $stokSistem;
 
         $insertRows[]   = '(?, ?, ?, ?, ?, ?, ?, ?, ?)';
-        array_push($insertParams,
-            $userId, $ukuranId, $tanggal,
-            $stokSistem, $stokFisik, $selisih,
+        array_push(
+            $insertParams,
+            $userId,
+            $ukuranId,
+            $tanggal,
+            $stokSistem,
+            $stokFisik,
+            $selisih,
             $keterangan !== '' ? $keterangan : null,
-            $ts, $ts
+            $ts,
+            $ts
         );
 
         $caseStok[]   = 'WHEN ? THEN ?';
@@ -195,7 +203,7 @@ if ($action === 'simpan') {
         // prepare sekali, execute sekali (SQL bervariasi tergantung N)
         $insertStmt = $db->prepare(
             'INSERT INTO verifikasi_stok (id_user, id_ukuran, tanggal, stok_sistem, stok_fisik, selisih, keterangan, created_at, updated_at) VALUES '
-            . implode(', ', $insertRows)
+                . implode(', ', $insertRows)
         );
         $insertStmt->execute($insertParams);
 
@@ -220,7 +228,10 @@ if ($action === 'simpan') {
         dashboard_cache_invalidate('dashboard_stats');
 
         // ── [QUERY 4] 1 log_aktivitas — sudah benar, di luar transaksi & loop ─
-        log_aktivitas('CREATE', 'verifikasi-stok', null,
+        log_aktivitas(
+            'CREATE',
+            'verifikasi-stok',
+            null,
             "Verifikasi stok {$tanggal} sebanyak {$n} item",
             [
                 'tanggal'    => $tanggal,
@@ -234,7 +245,6 @@ if ($action === 'simpan') {
 
         set_flash('success', $n . ' verifikasi stok berhasil disimpan.');
         redirect('/verifikasi-stok');
-
     } catch (\Throwable $e) {
         if ($db->inTransaction()) {
             $db->rollBack();
@@ -243,6 +253,7 @@ if ($action === 'simpan') {
         redirect('/verifikasi-stok/input');
     }
 }
+
 
 set_flash('error', 'Aksi tidak diketahui.');
 redirect('/verifikasi-stok/input');
