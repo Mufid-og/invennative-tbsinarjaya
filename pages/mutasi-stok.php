@@ -141,12 +141,13 @@ ob_start();
                         <th class="px-6 py-3 font-semibold text-right">Harga Modal</th>
                         <th class="px-6 py-3 font-semibold text-right">Harga Jual</th>
                         <th class="px-6 py-3 font-semibold">Keterangan</th>
+                        <th class="px-6 py-3 font-semibold">Aksi</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#e4e9f0]">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="8" class="px-6 py-12 text-center text-[#5a6a7a]">
+                            <td colspan="9" class="px-6 py-12 text-center text-[#5a6a7a]">
                                 <i class="bi bi-inbox text-4xl block mb-2 text-[#c3cbd5]"></i>
                                 <?php if ($search !== ''): ?>
                                     Tidak ada data yang cocok dengan pencarian "<strong><?= e($search) ?></strong>".
@@ -187,6 +188,23 @@ ob_start();
                                 <td class="px-6 py-3.5 text-right text-[#5a6a7a]"><?= e(format_rupiah($row['harga_modal'])) ?></td>
                                 <td class="px-6 py-3.5 text-right text-[#5a6a7a]"><?= e(format_rupiah($row['harga_jual'])) ?></td>
                                 <td class="px-6 py-3.5 text-[#5a6a7a] max-w-[180px] truncate" title="<?= e($row['keterangan']) ?>"><?= e($row['keterangan'] ?? '-') ?></td>
+                                <td class="px-6 py-3.5 whitespace-nowrap">
+                                    <form method="POST" action="/mutasi-stok">
+                                        <input type="hidden" name="action" value="hapus">
+                                        <input type="hidden" name="id" value="<?= $row['id'] ?>">
+                                        <?php if ($search !== ''): ?>
+                                            <input type="hidden" name="search" value="<?= e($search) ?>">
+                                        <?php endif; ?>
+                                        <input type="hidden" name="page" value="<?= $page ?>">
+                                        <button type="button"
+                                                data-confirm-title="Hapus Mutasi Stok"
+                                                data-confirm-text="<?= e($row['produk_nama'] . ' ' . $row['merek'] . ' ' . $row['ukuran']) ?> (<?= $row['jenis'] ?> x<?= format_number($row['qty'], 0) ?>) akan dihapus. Stok ukuran <?= $row['jenis'] === 'masuk' ? 'berkurang' : 'bertambah' ?> <?= format_number($row['qty'], 0) ?>. Lanjutkan?"
+                                                onclick="hapusKonfirmasi(this)"
+                                                class="px-3 py-1.5 rounded-lg border border-[#c9cbd3] text-[#5a6a7a] hover:text-[#c0392b] hover:border-[#c0392b] text-xs transition">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>

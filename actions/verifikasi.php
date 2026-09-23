@@ -255,5 +255,83 @@ if ($action === 'simpan') {
 }
 
 
+// ===== HAPUS (soft delete) + kembali ke stok_sistem =====
+if ($action === 'hapus') {
+    $id = (int)($_POST['id'] ?? 0);
+
+    $redirectUrl = '/verifikasi-stok';
+    $queryParams = [];
+    $searchHapus = trim((string)($_POST['search'] ?? ''));
+    $pageHapus   = (int)($_POST['page'] ?? 1);
+    if ($searchHapus !== '') $queryParams['search'] = $searchHapus;
+    if ($pageHapus > 1)      $queryParams['page']   = $pageHapus;
+    if ($queryParams) $redirectUrl .= '?' . http_build_query($queryParams);
+
+    if ($id <= 0) {
+        set_flash('error', 'Verifikasi stok tidak ditemukan.');
+        redirect($redirectUrl);
+    }
+
+    $stmt = db()->prepare(
+        'SELECT v.*, u.ukuran AS nama_ukuran, me.merek, p.nama AS produk_nama
+         FROM verifikasi_stok v
+         JOIN ukuran u ON u.id = v.id_ukuran
+         JOIN merek me ON me.id = u.id_merek
+         JOIN produk p ON p.id = me.id_produk
+         WHERE v.id = ? AND v.deleted_at IS NULL'
+    );
+    $stmt->execute([$id]);
+    $verifikasi = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$verifikasi) {
+        set_flash('error', 'Verifikasi stok tidak ditemukan.');
+        redirect($redirectUrl);
+    }
+
+    $ts = now();
+    $db = db();
+
+    try {
+        $db->beginTransaction();
+
+        $del = $db->prepare('UPDATE verifikasi_stok SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL');
+        $del->execute([$ts, $ts, $id]);
+        if ($del->rowCount() !== 1) {
+            throw new RuntimeException('Verifikasi stok sudah dihapus atau tidak ditemukan.');
+        }
+
+        // Kembalikan stok ke kondisi sebelum diverifikasi (selisih plus/minus terserap
+        // karena stok_sistem = snapshot stok saat verifikasi disimpan).
+        $db->prepare('UPDATE ukuran SET stok = ?, updated_at = ? WHERE id = ?')
+            ->execute([(float)$verifikasi['stok_sistem'], $ts, (int)$verifikasi['id_ukuran']]);
+
+        $db->commit();
+    } catch (\Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        set_flash('error', 'Gagal menghapus verifikasi stok: ' . $e->getMessage());
+        redirect($redirectUrl);
+    }
+
+    // Invalidasi dashboard cache: stok berubah setelah verifikasi
+    require_once __DIR__ . '/../includes/dashboard_cache.php';
+    dashboard_cache_invalidate('dashboard_stats');
+
+    $namaLengkap = $verifikasi['produk_nama'] . ' ' . $verifikasi['merek'] . ' ' . $verifikasi['nama_ukuran'];
+    log_aktivitas('DELETE', 'verifikasi-stok', $id,
+        'Verifikasi stok dihapus: ' . $namaLengkap . ' pada ' . $verifikasi['tanggal'] . ' (stok dikembalikan ke ' . (float)$verifikasi['stok_sistem'] . ')',
+        [
+            'produk'      => $verifikasi['produk_nama'],
+            'merek'       => $verifikasi['merek'],
+            'ukuran'      => $verifikasi['nama_ukuran'],
+            'tanggal'     => $verifikasi['tanggal'],
+            'stok_sistem' => (float)$verifikasi['stok_sistem'],
+            'stok_fisik'  => (float)$verifikasi['stok_fisik'],
+            'selisih'     => (float)$verifikasi['selisih'],
+        ]
+    );
+    set_flash('success', 'Verifikasi stok berhasil dihapus. Stok ukuran dikembalikan.');
+    redirect($redirectUrl);
+}
+
+
 set_flash('error', 'Aksi tidak diketahui.');
 redirect('/verifikasi-stok/input');

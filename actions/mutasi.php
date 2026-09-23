@@ -324,6 +324,81 @@ switch ($action) {
         }
         break;
 
+    case 'hapus':
+        $id = (int)($_POST['id'] ?? 0);
+
+        $redirectUrl = '/mutasi-stok';
+        $queryParams    = [];
+        $searchHapus    = trim((string)($_POST['search'] ?? ''));
+        $pageHapus      = (int)($_POST['page'] ?? 1);
+        if ($searchHapus !== '')  $queryParams['search'] = $searchHapus;
+        if ($pageHapus > 1)       $queryParams['page']   = $pageHapus;
+        if ($queryParams) $redirectUrl .= '?' . http_build_query($queryParams);
+
+        if ($id <= 0) {
+            set_flash('error', 'Mutasi stok tidak ditemukan.');
+            redirect($redirectUrl);
+        }
+
+        $stmt = db()->prepare(
+            'SELECT m.*, u.ukuran AS nama_ukuran, me.merek, p.nama AS produk_nama
+             FROM mutasi_stok m
+             JOIN ukuran u ON u.id = m.id_ukuran
+             JOIN merek me ON me.id = u.id_merek
+             JOIN produk p ON p.id = me.id_produk
+             WHERE m.id = ? AND m.deleted_at IS NULL'
+        );
+        $stmt->execute([$id]);
+        $mutasi = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$mutasi) {
+            set_flash('error', 'Mutasi stok tidak ditemukan.');
+            redirect($redirectUrl);
+        }
+
+        // Reversal: masuk → stok -qty, keluar → stok +qty (stok boleh negatif)
+        $delta = $mutasi['jenis'] === 'keluar' ? (float)$mutasi['qty'] : -(float)$mutasi['qty'];
+        $ts    = now();
+        $db    = db();
+
+        try {
+            $db->beginTransaction();
+
+            $del = $db->prepare('UPDATE mutasi_stok SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL');
+            $del->execute([$ts, $ts, $id]);
+            if ($del->rowCount() !== 1) {
+                throw new RuntimeException('Mutasi stok sudah dihapus atau tidak ditemukan.');
+            }
+
+            $db->prepare('UPDATE ukuran SET stok = stok + ?, updated_at = ? WHERE id = ?')
+                ->execute([$delta, $ts, (int)$mutasi['id_ukuran']]);
+
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            set_flash('error', 'Gagal menghapus mutasi stok: ' . $e->getMessage());
+            redirect($redirectUrl);
+        }
+
+        // Invalidasi dashboard cache: stok berubah (stats) + riwayat mutasi berubah (charts)
+        require_once __DIR__ . '/../includes/dashboard_cache.php';
+        dashboard_cache_invalidate('dashboard_stats', 'dashboard_charts');
+
+        $namaLengkap = $mutasi['produk_nama'] . ' ' . $mutasi['merek'] . ' ' . $mutasi['nama_ukuran'];
+        log_aktivitas('DELETE', 'mutasi-stok', $id,
+            'Mutasi stok ' . $mutasi['jenis'] . ' dihapus: ' . $namaLengkap . ' x' . $mutasi['qty'] . ' (stok dikembalikan)',
+            [
+                'produk' => $mutasi['produk_nama'],
+                'merek'  => $mutasi['merek'],
+                'ukuran' => $mutasi['nama_ukuran'],
+                'jenis'  => $mutasi['jenis'],
+                'qty'    => $mutasi['qty'],
+                'tanggal'=> $mutasi['tanggal'],
+            ]
+        );
+        set_flash('success', 'Mutasi stok berhasil dihapus. Stok ukuran dikembalikan.');
+        redirect($redirectUrl);
+        break;
+
     default:
         redirect('/mutasi-stok');
         break;

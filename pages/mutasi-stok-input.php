@@ -412,15 +412,15 @@ ob_start();
                                 <div class="space-y-3 max-h-[350px] overflow-y-auto pr-1" id="cartItems">
                                     <?php foreach ($keranjang as $ukId => $item): ?>
                                         <?php $itemDetail = $keranjangMap[(int)$ukId] ?? null; ?>
-                                        <div class="bg-[#f7faff] rounded-xl border border-[#e4e9f0] p-3">
+                                        <div class="rounded-xl p-3.5 border-l-4 border-l-[#205295] border border-[#bcd4f0] bg-[#eaf3fc]">
                                             <div class="flex items-start justify-between gap-2 mb-2">
                                                 <div class="min-w-0">
-                                                    <div class="text-[13px] font-semibold text-[#1a2332] truncate"><?= e($itemDetail['produk_nama']) ?></div>
-                                                    <div class="text-[11px] text-[#5a6a7a]"><?= e($itemDetail['merek']) ?> &middot; Uk. <?= e($itemDetail['ukuran']) ?> &middot; Stok: <?= format_number($itemDetail['stok'], 0) ?></div>
+                                                    <div class="text-[13px] font-semibold text-[#144272] leading-snug"><?= e($itemDetail['produk_nama']) ?> — <?= e($itemDetail['merek']) ?> — <?= e($itemDetail['ukuran']) ?></div>
+                                                    <div class="text-[11px] font-medium text-[#5a6a7a]">Stok: <?= format_number($itemDetail['stok'], 0) ?></div>
                                                 </div>
                                                 <div class="flex-shrink-0">
-                                                    <button type="submit" form="formHapusKeranjang_<?= $ukId ?>" class="text-[#c0392b] hover:text-red-700 transition text-sm" title="Hapus">
-                                                        <i class="bi bi-x-lg"></i>
+                                                    <button type="submit" form="formHapusKeranjang_<?= $ukId ?>" class="text-[#c0392b] hover:text-[#a02820] cursor-pointer shrink-0 transition" title="Hapus">
+                                                        <i class="bi bi-trash"></i>
                                                     </button>
                                                 </div>
                                             </div>
@@ -483,6 +483,17 @@ ob_start();
                             </div>
                         <?php endif; ?>
                     </form>
+
+                    <?php if (!empty($keranjang)): ?>
+                        <?php foreach ($keranjang as $ukId => $item): ?>
+                            <form id="formHapusKeranjang_<?= $ukId ?>" method="POST" action="/mutasi-stok/input" style="display:none">
+                                <input type="hidden" name="action" value="hapus_keranjang">
+                                <input type="hidden" name="ukuran_id" value="<?= $ukId ?>">
+                                <input type="hidden" name="produk_id" value="<?= $produkId ?>">
+                                <input type="hidden" name="merek_id" value="<?= $merekId ?>">
+                            </form>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
