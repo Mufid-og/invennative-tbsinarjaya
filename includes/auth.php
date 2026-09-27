@@ -5,6 +5,10 @@ declare(strict_types=1);
 function auth_start(): void
 {
     if (session_status() === PHP_SESSION_NONE) {
+        $sessionPath = session_save_path();
+        if ($sessionPath !== '' && $sessionPath !== '0' && !is_dir($sessionPath)) {
+            @mkdir($sessionPath, 0777, true);
+        }
         session_start();
     }
 }
