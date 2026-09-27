@@ -99,6 +99,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // ---- Pastikan hak akses file OK (khusus Windows) ----
         @chmod($dbPath, 0666);
 
+        // Invalidasi cache dashboard: isi DB berubah total setelah restore.
+        require_once __DIR__ . '/../includes/dashboard_cache.php';
+        dashboard_cache_invalidate('dashboard_stats', 'dashboard_charts');
+
         set_flash('success', 'Database berhasil dipulihkan. File WAL lama sudah dibersihkan.');
         redirect('/dashboard');
     }
@@ -341,6 +345,10 @@ function handle_update_app(): void
     }
 
     log_aktivitas('UPDATE', 'setting', null, "Update aplikasi ke v{$newVersion} dari: {$originalName}");
+
+    // Invalidasi cache dashboard: kode baru berpotensi mengubah cara statistik dihitung.
+    require_once __DIR__ . '/../includes/dashboard_cache.php';
+    dashboard_cache_invalidate('dashboard_stats', 'dashboard_charts');
 
     set_flash('success', "Update aplikasi berhasil (v{$newVersion}). Database tidak diubah.");
     redirect('/setting');

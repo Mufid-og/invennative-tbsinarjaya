@@ -1,10 +1,13 @@
 <?php
 // pages/login.php
+require_once __DIR__ . '/../includes/env_check.php';
+
 $pageTitle = 'Masuk - Inventaris Toko Bangunan';
 $errors = $_SESSION['login_errors'] ?? [];
 $old = $_SESSION['login_old'] ?? [];
 unset($_SESSION['login_errors'], $_SESSION['login_old']);
 
+$envIssues = env_requirements();
 $flash = get_flash();
 ob_start();
 ?>
@@ -16,6 +19,20 @@ ob_start();
         </div>
         <p class="text-sm text-[#5a6a7a]">Inventory Management &mdash; Toko Bangunan</p>
     </div>
+
+    <?php if ($envIssues): ?>
+        <div class="mb-4 px-4 py-3 rounded-lg border border-[#f0d390] bg-[#fff7e6] text-sm">
+            <p class="font-semibold text-[#8a5b00] mb-2"><i class="bi bi-exclamation-triangle"></i> Server belum memenuhi syarat aplikasi</p>
+            <ul class="space-y-2">
+                <?php foreach ($envIssues as $issue): ?>
+                    <li class="text-[#8a5b00]">
+                        <strong><?= e($issue['label']) ?>.</strong>
+                        <?= e($issue['detail']) ?>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+    <?php endif; ?>
 
     <?php if ($flash): ?>
         <div class="mb-4 px-4 py-3 rounded-lg <?= $flash['type'] === 'error' ? 'bg-[#fde8e8] text-[#c0392b]' : 'bg-[#dff5e4] text-[#1a7a3a]' ?> text-sm">
