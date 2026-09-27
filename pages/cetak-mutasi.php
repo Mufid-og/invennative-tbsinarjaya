@@ -108,6 +108,39 @@ if ($totalDetail > 10000 && !isset($_GET['confirm'])) {
             .btn-ghost {
                 background: #c3cbd5;
             }
+
+            #confirm-loading {
+                position: fixed;
+                inset: 0;
+                z-index: 9999;
+                background: rgba(10, 38, 71, 0.55);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 14px;
+            }
+
+            #confirm-loading .cspinner {
+                width: 44px;
+                height: 44px;
+                border-radius: 50%;
+                border: 4px solid rgba(255, 255, 255, 0.35);
+                border-top-color: #fff;
+                animation: confirm-spin .8s linear infinite;
+            }
+
+            #confirm-loading .ctext {
+                color: #fff;
+                font-size: 14px;
+                font-weight: 600;
+            }
+
+            @keyframes confirm-spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
         </style>
     </head>
 
@@ -116,10 +149,86 @@ if ($totalDetail > 10000 && !isset($_GET['confirm'])) {
             <h2>Data terlalu besar untuk <?= $isDownload ? 'disimpan' : 'dicetak' ?></h2>
             <p>Periode ini berisi <strong><?= number_format($totalDetail, 0, ',', '.') ?></strong> baris detail mutasi/verifikasi. Laporan berskala besar akan berat. Pertimbangkan mempersempit periode (maksimal 3 bulan) sebelum melanjutkan.</p>
             <div class="row">
-                <a class="btn btn-primary" href="<?= e(build_lanjutkan_cetak_url($dari, $sampai, $isDownload)) ?>">Lanjutkan <?= $isDownload ? 'Simpan' : 'Cetak' ?></a>
+                <a class="btn btn-primary" id="btn-confirm-simpan" href="<?= e(build_lanjutkan_cetak_url($dari, $sampai, $isDownload)) ?>">Lanjutkan <?= $isDownload ? 'Simpan' : 'Cetak' ?></a>
                 <button class="btn btn-ghost" onclick="window.close()">Tutup</button>
             </div>
         </div>
+        <script>
+            (function() {
+                var link = document.getElementById('btn-confirm-simpan');
+                if (!link) return;
+
+                function showLoading() {
+                    if (document.getElementById('confirm-loading')) return;
+                    var el = document.createElement('div');
+                    el.id = 'confirm-loading';
+                    el.innerHTML = '<div class="cspinner"></div><div class="ctext">Menyimpan laporan...</div>';
+                    document.body.appendChild(el);
+                }
+
+                function hideLoading() {
+                    var el = document.getElementById('confirm-loading');
+                    if (el) el.remove();
+                }
+
+                link.addEventListener('click', function(e) {
+                    var url = new URL(link.href, window.location.origin);
+                    if (url.searchParams.get('download') !== '1') {
+                        showLoading();
+                        return;
+                    }
+                    e.preventDefault();
+                    showLoading();
+                    var filename = 'laporan-mutasi-stok_' + (url.searchParams.get('dari') || '') + '_sd_' + (url.searchParams.get('sampai') || '') + '.pdf';
+                    fetch(url.toString(), {
+                        credentials: 'same-origin',
+                        headers: {
+                            'Accept': 'application/pdf'
+                        },
+                    }).then(function(res) {
+                        if (!res.ok) throw new Error('Gagal membuat PDF.');
+                        return res.blob();
+                    }).then(function(blob) {
+                        function saveBlob() {
+                            var a = document.createElement('a');
+                            var objectUrl = URL.createObjectURL(blob);
+                            a.href = objectUrl;
+                            a.download = filename;
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
+                            URL.revokeObjectURL(objectUrl);
+                            hideLoading();
+                        }
+                        if (!window.showSaveFilePicker) {
+                            saveBlob();
+                            return;
+                        }
+                        window.showSaveFilePicker({
+                            suggestedName: filename,
+                            types: [{
+                                description: 'PDF Document',
+                                accept: {
+                                    'application/pdf': ['.pdf']
+                                },
+                            }],
+                        }).then(function(handle) {
+                            return handle.createWritable().then(function(w) {
+                                return w.write(blob).then(function() {
+                                    return w.close();
+                                });
+                            });
+                        }).then(hideLoading, function(err) {
+                            hideLoading();
+                            if (!err || err.name !== 'AbortError') saveBlob();
+                        });
+                    }).catch(function() {
+                        hideLoading();
+                        window.location.href = url.toString();
+                    });
+                });
+            })();
+        </script>
     </body>
 
     </html>
@@ -537,6 +646,39 @@ function render_laporan_mutasi(
             .pdf h3 {
                 margin: 18px 0 8px;
             }
+
+            #report-loading {
+                position: fixed;
+                inset: 0;
+                z-index: 9999;
+                background: rgba(10, 38, 71, 0.55);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 14px;
+            }
+
+            #report-loading .report-spinner {
+                width: 44px;
+                height: 44px;
+                border-radius: 50%;
+                border: 4px solid rgba(255, 255, 255, 0.35);
+                border-top-color: #fff;
+                animation: report-spin .8s linear infinite;
+            }
+
+            #report-loading .report-loading-text {
+                color: #fff;
+                font-size: 14px;
+                font-weight: 600;
+            }
+
+            @keyframes report-spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
         </style>
     </head>
 
@@ -546,7 +688,7 @@ function render_laporan_mutasi(
                 <div class="toolbar-inner">
                     <div class="toolbar-title">Pratinjau Laporan Mutasi Stok</div>
                     <div>
-                        <button class="btn btn-primary" type="button" onclick="saveLaporanMutasi()">Simpan</button>
+                        <button class="btn btn-primary" type="button" id="btn-simpan" onclick="saveLaporanMutasi()">Simpan</button>
                         <button class="btn btn-ghost" type="button" onclick="window.close()">Tutup</button>
                     </div>
                 </div>
@@ -606,10 +748,10 @@ function render_laporan_mutasi(
                                         <td rowspan="<?= $merekRowspan[$i] ?>" style="vertical-align:top; font-weight:600;"><?= e($r['merek']) ?></td>
                                     <?php endif; ?>
                                     <td><?= e($r['ukuran']) ?></td>
-                                    <td><?= format_number($stokAwal) ?></td>
-                                    <td class="green"><?= format_number($r['total_masuk']) ?></td>
-                                    <td class="red"><?= format_number($r['total_keluar']) ?></td>
-                                    <td><strong><?= format_number($r['stok_akhir']) ?></strong></td>
+                                    <td><?= format_qty($stokAwal) ?></td>
+                                    <td class="green"><?= format_qty((float)$r['total_masuk']) ?></td>
+                                    <td class="red"><?= format_qty((float)$r['total_keluar']) ?></td>
+                                    <td><strong><?= format_qty((float)$r['stok_akhir']) ?></strong></td>
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>
@@ -652,10 +794,10 @@ function render_laporan_mutasi(
                                             <span class="badge badge-out">Keluar</span>
                                         <?php endif; ?>
                                     </td>
-                                    <td><?= $d['tipe'] !== 'Verifikasi' ? format_number($d['qty']) : '-' ?></td>
+                                    <td><?= $d['tipe'] !== 'Verifikasi' ? format_qty((float)$d['qty']) : '-' ?></td>
                                     <td>
                                         <?php if ($d['tipe'] === 'Verifikasi'): ?>
-                                            <span class="<?= $d['selisih'] >= 0 ? 'green' : 'red' ?>"><?= format_number($d['selisih']) ?></span>
+                                            <span class="<?= $d['selisih'] >= 0 ? 'green' : 'red' ?>"><?= format_qty((float)$d['selisih']) ?></span>
                                         <?php else: ?>
                                             -
                                         <?php endif; ?>
@@ -685,11 +827,7 @@ function render_laporan_mutasi(
                     const filename = <?= json_encode($filename) ?>;
                     const url = new URL(window.location.href);
                     url.searchParams.set('download', '1');
-
-                    if (!window.showSaveFilePicker) {
-                        fallbackDownload(url.toString(), filename);
-                        return;
-                    }
+                    setReportLoading(true);
 
                     try {
                         const response = await fetch(url.toString(), {
@@ -702,29 +840,67 @@ function render_laporan_mutasi(
                             throw new Error('Gagal membuat PDF.');
                         }
                         const contentType = response.headers.get('Content-Type') || '';
+                        const blob = await response.blob();
                         if (!contentType.includes('application/pdf')) {
-                            fallbackDownload(url.toString(), filename);
-                            return;
+                            throw new Error('Tanggapan bukan PDF.');
                         }
 
-                        const blob = await response.blob();
-                        const handle = await window.showSaveFilePicker({
-                            suggestedName: filename,
-                            types: [{
-                                description: 'PDF Document',
-                                accept: {
-                                    'application/pdf': ['.pdf']
-                                },
-                            }],
-                        });
-                        const writable = await handle.createWritable();
-                        await writable.write(blob);
-                        await writable.close();
+                        if (window.showSaveFilePicker) {
+                            setReportLoading(false);
+                            const handle = await window.showSaveFilePicker({
+                                suggestedName: filename,
+                                types: [{
+                                    description: 'PDF Document',
+                                    accept: {
+                                        'application/pdf': ['.pdf']
+                                    },
+                                }],
+                            });
+                            const writable = await handle.createWritable();
+                            await writable.write(blob);
+                            await writable.close();
+                        } else {
+                            saveBlobDownload(blob, filename);
+                            setReportLoading(false);
+                        }
                     } catch (error) {
+                        setReportLoading(false);
                         if (error && error.name === 'AbortError') {
                             return;
                         }
                         fallbackDownload(url.toString(), filename);
+                    }
+                }
+
+                function saveBlobDownload(blob, filename) {
+                    const link = document.createElement('a');
+                    const objectUrl = URL.createObjectURL(blob);
+                    link.href = objectUrl;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    URL.revokeObjectURL(objectUrl);
+                }
+
+                function setReportLoading(on) {
+                    const btn = document.getElementById('btn-simpan');
+                    if (btn) {
+                        btn.disabled = on;
+                    }
+                    if (on) {
+                        if (document.getElementById('report-loading')) {
+                            return;
+                        }
+                        const overlay = document.createElement('div');
+                        overlay.id = 'report-loading';
+                        overlay.innerHTML = '<div class="report-spinner"></div><div class="report-loading-text">Menyimpan laporan...</div>';
+                        document.body.appendChild(overlay);
+                        return;
+                    }
+                    const overlay = document.getElementById('report-loading');
+                    if (overlay) {
+                        overlay.remove();
                     }
                 }
 

@@ -171,13 +171,17 @@ switch ($action) {
         $editId = (int)($_POST['edit_id'] ?? 0);
         $idMerek = (int)($_POST['id_merek'] ?? 0);
         $namaUkuran = trim($_POST['ukuran'] ?? '');
-        $stok = (float)($_POST['stok'] ?? 0);
+        $stokRaw = trim((string)($_POST['stok'] ?? ''));
+        $stok = $stokRaw !== '' ? parse_qty($stokRaw) : 0.0;
         $hargaModal = (float)(preg_replace('/[^\d]/', '', $_POST['harga_modal'] ?? '0'));
         $hargaJual = (float)(preg_replace('/[^\d]/', '', $_POST['harga_jual'] ?? '0'));
 
         $errors = [];
         if ($namaUkuran === '') {
             $errors['ukuran'] = 'Ukuran wajib diisi.';
+        }
+        if ($stokRaw !== '' && $stok === null) {
+            $errors['stok'] = 'Stok awal tidak valid.';
         }
         if ($hargaModal < 0) {
             $errors['harga_modal'] = 'Harga modal tidak boleh negatif.';

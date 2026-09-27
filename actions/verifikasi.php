@@ -77,15 +77,16 @@ if ($action === 'tambah_keranjang') {
 // ===== UPDATE STOK FISIK KERANJANG =====
 if ($action === 'update_stok_fisik') {
     $ukuranId = (int)($_POST['ukuran_id'] ?? 0);
-    $raw      = trim(str_replace('.', '', (string)($_POST['stok_fisik'] ?? '0')));
-    $raw      = str_replace(',', '.', $raw);
-    $stokFisik = (float)$raw;
+    $raw      = trim((string)($_POST['stok_fisik'] ?? ''));
+    $stokFisik = parse_qty($raw);
+    if ($stokFisik === null) {
+        set_flash('error', 'Stok fisik tidak valid.');
+        redirect('/verifikasi-stok/input');
+    }
 
     if (isset($_SESSION['verifikasi_keranjang'][$ukuranId])) {
         $_SESSION['verifikasi_keranjang'][$ukuranId]['stokFisik'] = $stokFisik;
     }
-
-
 
     redirect('/verifikasi-stok/input');
 }
@@ -165,8 +166,8 @@ if ($action === 'simpan') {
     foreach ($keranjang as $ukuranId => $cartItem) {
         $ukuran     = $ukuranMap[(int)$ukuranId]; // O(1) lookup
         $stokSistem = (float)$ukuran['stok'];
-        $stokFisik  = isset($cartItem['stokFisik']) ? (float)$cartItem['stokFisik'] : $stokSistem;
-        $selisih    = $stokFisik - $stokSistem;
+        $stokFisik  = isset($cartItem['stokFisik']) ? round((float)$cartItem['stokFisik'], 2) : $stokSistem;
+        $selisih    = round($stokFisik - $stokSistem, 2);
 
         $insertRows[]   = '(?, ?, ?, ?, ?, ?, ?, ?, ?)';
         array_push(

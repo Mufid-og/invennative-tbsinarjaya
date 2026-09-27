@@ -183,10 +183,10 @@ ob_start();
                                                             <td class="px-4 py-2 text-sm font-medium text-[#1a2332]">
                                                                 <?= e($item['produk'] ?? '-') ?><span class="text-[#5a6a7a] font-normal"> &middot; <?= e($item['merek'] ?? '-') ?> &middot; <?= e($item['ukuran'] ?? '-') ?></span>
                                                             </td>
-                                                            <td class="px-4 py-2 text-right text-sm text-[#5a6a7a]"><?= format_number((float)($item['stok_sistem'] ?? 0), 0) ?></td>
-                                                            <td class="px-4 py-2 text-right text-sm text-[#1a2332]"><?= format_number((float)($item['stok_fisik'] ?? 0), 0) ?></td>
+                                                            <td class="px-4 py-2 text-right text-sm text-[#5a6a7a]"><?= format_qty((float)($item['stok_sistem'] ?? 0)) ?></td>
+                                                            <td class="px-4 py-2 text-right text-sm text-[#1a2332]"><?= format_qty((float)($item['stok_fisik'] ?? 0)) ?></td>
                                                             <td class="px-4 py-2 text-right text-sm font-semibold <?= $selisih > 0 ? 'text-[#1a7a3a]' : ($selisih < 0 ? 'text-[#c0392b]' : 'text-[#5a6a7a]') ?>">
-                                                                <?= $selisih > 0 ? '+' : '' ?><?= format_number($selisih, 0) ?>
+                                                                <?= $selisih > 0 ? '+' : '' ?><?= format_qty($selisih) ?>
                                                             </td>
                                                         </tr>
                                                     <?php endforeach; ?>
@@ -218,7 +218,7 @@ ob_start();
                                                         if (in_array($mKey, ['harga_modal', 'harga_jual'])) {
                                                             $mDisplay = format_rupiah($mVal);
                                                         } elseif ($mKey === 'qty') {
-                                                            $mDisplay = format_number((float)$mVal, 0);
+                                                            $mDisplay = format_qty((float)$mVal);
                                                         } elseif ($mKey === 'jenis') {
                                                             $mDisplay = $mVal === 'masuk' ? 'Masuk' : ($mVal === 'keluar' ? 'Keluar' : $mVal);
                                                         } elseif ($mKey === 'tanggal') {
@@ -290,17 +290,25 @@ ob_start();
 
 <script>
 window.openModalCetakLog = function() {
+    var now = new Date();
+    var pad = function(n) {
+        return String(n).padStart(2, '0');
+    };
+    var dari = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-01';
+    var lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    var sampai = lastDay.getFullYear() + '-' + pad(lastDay.getMonth() + 1) + '-' + pad(lastDay.getDate());
+
     Swal.fire({
         title: 'Cetak Laporan Log Aktivitas',
         html: `
             <div class="text-left space-y-3">
                 <div>
                     <label class="block text-[13px] font-medium text-[#5a6a7a] mb-1">Dari Tanggal</label>
-                    <input type="date" id="cetak-dari" class="w-full px-3 py-2 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295]">
+                    <input type="date" id="cetak-dari" value="${dari}" class="w-full px-3 py-2 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295]">
                 </div>
                 <div>
                     <label class="block text-[13px] font-medium text-[#5a6a7a] mb-1">Sampai Tanggal</label>
-                    <input type="date" id="cetak-sampai" class="w-full px-3 py-2 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295]">
+                    <input type="date" id="cetak-sampai" value="${sampai}" class="w-full px-3 py-2 text-[13px] border border-[#dce3ed] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295]">
                 </div>
             </div>
         `,

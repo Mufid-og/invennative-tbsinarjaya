@@ -188,8 +188,8 @@ ob_start();
                 <p class="text-[13px] text-[#5a6a7a] mt-0.5">Jumlah qty masuk &amp; keluar per bulan</p>
             </div>
             <div class="flex items-center gap-4 text-[13px]">
-                <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-[#1a7a3a] inline-block"></span> Masuk</span>
-                <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-[#c0392b] inline-block"></span> Keluar</span>
+                <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-[#c0392b] inline-block"></span> Masuk</span>
+                <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-[#1a7a3a] inline-block"></span> Keluar</span>
             </div>
         </div>
 
@@ -199,13 +199,13 @@ ob_start();
                     <div class="flex-1 flex flex-col items-center justify-end h-full gap-2 group relative" title="<?= e($c['label']) ?>">
                         <div class="flex items-end gap-1.5 h-full" style="height: <?= $maxBar ?>px;">
                             <div class="flex flex-col items-center justify-end h-full">
-                                <span class="text-[11px] font-bold text-[#1a7a4c] mb-1 group-hover:opacity-100 <?= $c['masuk'] ? '' : 'opacity-0' ?>"><?= number_format($c['masuk'], 0, ',', '.') ?></span>
-                                <div class="w-5 sm:w-8 rounded-t-md bg-[#35a054] hover:bg-[#1a7a4c] transition-colors"
+                                <span class="text-[11px] font-bold text-[#c0392b] mb-1 group-hover:opacity-100 <?= $c['masuk'] ? '' : 'opacity-0' ?>"><?= number_format($c['masuk'], 0, ',', '.') ?></span>
+                                <div class="w-5 sm:w-8 rounded-t-md bg-[#e05959] hover:bg-[#c0392b] transition-colors"
                                      style="height: <?= max(2, $c['masuk'] / $tertinggi * $maxBar) ?>px;"></div>
                             </div>
                             <div class="flex flex-col items-center justify-end h-full">
-                                <span class="text-[11px] font-bold text-[#c0392b] mb-1 group-hover:opacity-100 <?= $c['keluar'] ? '' : 'opacity-0' ?>"><?= number_format($c['keluar'], 0, ',', '.') ?></span>
-                                <div class="w-5 sm:w-8 rounded-t-md bg-[#e05959] hover:bg-[#c0392b] transition-colors"
+                                <span class="text-[11px] font-bold text-[#1a7a3a] mb-1 group-hover:opacity-100 <?= $c['keluar'] ? '' : 'opacity-0' ?>"><?= number_format($c['keluar'], 0, ',', '.') ?></span>
+                                <div class="w-5 sm:w-8 rounded-t-md bg-[#35a054] hover:bg-[#1a7a4c] transition-colors"
                                      style="height: <?= max(2, $c['keluar'] / $tertinggi * $maxBar) ?>px;"></div>
                             </div>
                         </div>
@@ -248,7 +248,7 @@ ob_start();
                                 <td class="px-6 py-3.5 font-medium"><?= e($u['produk_nama'] ?? '-') ?></td>
                                 <td class="px-6 py-3.5"><?= e($u['merek'] ?? '-') ?></td>
                                 <td class="px-6 py-3.5"><?= e($u['ukuran']) ?></td>
-                                <td class="px-6 py-3.5"><?= format_number($u['stok']) ?></td>
+                                <td class="px-6 py-3.5"><?= format_qty((float)$u['stok']) ?></td>
                                 <td class="px-6 py-3.5">
                                     <?php if ($u['stok'] <= 0): ?>
                                         <span class="px-2.5 py-1 rounded-full bg-[#fde8e8] text-[#c0392b] text-xs font-semibold">Habis</span>

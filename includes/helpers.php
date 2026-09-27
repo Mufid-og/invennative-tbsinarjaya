@@ -39,6 +39,83 @@ function format_number($angka, int $decimals = 2): string
     return number_format((float)$angka, $decimals, ',', '.');
 }
 
+/**
+ * Parsing angka qty/stok dari input user.
+ *
+ * Aturan (match JS parseQtyValue di templates/app.php):
+ *  - Bila ada koma (,) → koma adalah desimal (yang terakhir); titik dihilangkan (ribuan).
+ *    "10,5" → 10.5 · "1.000,5" → 1000.5 · "1,000" → 1.0 (koma manual = desimal)
+ *  - Bila tanpa koma, ada titik (.) → 3 digit di belakang = ribuan (dihilangkan),
+ *    selain itu titik = desimal. "1.000" → 1000 · "10.5" → 10.5 · "0.5" → 0.5
+ *  - Tanpa pemisah → angka bulat. "1000" → 1000
+ *  - Dukung tanda minus di depan.
+ *
+ * Return float (dibulatkan 2 desimal), atau null bila tidak valid.
+ */
+function parse_qty(string $raw): ?float
+{
+    $raw = trim($raw);
+    if ($raw === '' || $raw === '-') {
+        return null;
+    }
+
+    $negative = $raw[0] === '-';
+    if ($negative) {
+        $raw = substr($raw, 1);
+    }
+
+    $num = preg_replace('/[^0-9.,]/', '', $raw);
+    if ($num === '' || $num === '.' || $num === ',') {
+        return null;
+    }
+
+    if (str_contains($num, ',')) {
+        $pos = strrpos($num, ',');
+        $integer  = str_replace('.', '', substr($num, 0, $pos));
+        $fraction = substr($num, $pos + 1);
+    } else {
+        $dot = strrpos($num, '.');
+        if ($dot !== false) {
+            $after = substr($num, $dot + 1);
+            if (strlen($after) === 3) {
+                $integer  = str_replace('.', '', $num);
+                $fraction = '';
+            } else {
+                $integer  = substr($num, 0, $dot);
+                $fraction = $after;
+            }
+        } else {
+            $integer  = $num;
+            $fraction = '';
+        }
+    }
+
+    if (!preg_match('/^\d*$/', $integer) || !preg_match('/^\d*$/', $fraction)) {
+        return null;
+    }
+
+    $value = $integer === '' ? 0.0 : (float)$integer;
+    if ($fraction !== '') {
+        $value += (float)('0.' . $fraction);
+    }
+    $value = round($value, 2);
+
+    return $negative ? -$value : $value;
+}
+
+/**
+ * Format angka qty/stok untuk tampilan: maks. 2 desimal, trailing nol dibuang,
+ * pemisah ribuan titik, desimal koma. "2.5"→"2,5" · "2.25"→"2,25" · "1000"→"1.000"
+ */
+function format_qty(float $value): string
+{
+    $value = round($value, 2);
+    if (abs($value - round($value)) < 1e-9) {
+        return number_format($value, 0, ',', '.');
+    }
+    return rtrim(rtrim(number_format($value, 2, ',', '.'), '0'), ',');
+}
+
 function set_flash(string $type, string $message): void
 {
     $_SESSION['flash'] = ['type' => $type, 'message' => $message];

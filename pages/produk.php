@@ -379,9 +379,9 @@ ob_start();
                                         <?php if ($stok <= 0): ?>
                                             <span class="px-2 py-1 rounded-full bg-[#fde8e8] text-[#c0392b] text-xs font-semibold">Habis</span>
                                         <?php elseif ($stok <= 5): ?>
-                                            <span class="px-2 py-1 rounded-full bg-[#fef0db] text-[#b86500] text-xs font-semibold"><?= format_number($stok) ?> &mdash; Menipis</span>
+                                            <span class="px-2 py-1 rounded-full bg-[#fef0db] text-[#b86500] text-xs font-semibold"><?= format_qty($stok) ?> &mdash; Menipis</span>
                                         <?php else: ?>
-                                            <span class="px-2 py-1 rounded-full bg-[#dff5e4] text-[#1a7a3a] text-xs font-semibold"><?= format_number($stok) ?> &mdash; Tersedia</span>
+                                            <span class="px-2 py-1 rounded-full bg-[#dff5e4] text-[#1a7a3a] text-xs font-semibold"><?= format_qty($stok) ?> &mdash; Tersedia</span>
                                         <?php endif; ?>
                                     </td>
                                     <td class="px-6 py-3.5"><?= format_rupiah($ukuran['harga_modal']) ?></td>
@@ -530,7 +530,7 @@ ob_start();
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                         <label class="block text-sm font-medium text-[#1a2332] mb-1.5">Stok</label>
-                        <input type="text" name="stok" value="<?= e($stokVal) ?>" <?= $editId ? 'disabled' : '' ?> class="w-full px-3 py-2.5 border border-[#c9cbd3] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2c74b3] <?= $editId ? 'bg-[#f0f4f8] text-[#5a6a7a]' : '' ?>">
+                        <input type="text" inputmode="decimal" data-qty name="stok" value="<?= e(format_qty((float)$stokVal)) ?>" <?= $editId ? 'disabled' : '' ?> class="w-full px-3 py-2.5 border border-[#c9cbd3] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2c74b3] <?= $editId ? 'bg-[#f0f4f8] text-[#5a6a7a]' : '' ?>">
                         <?php if ($editId): ?><p class="mt-1 text-[11px] text-[#5a6a7a]">Stok diubah lewat Mutasi Stok.</p><?php endif; ?>
                     </div>
                     <div>

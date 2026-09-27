@@ -9,11 +9,20 @@ declare(strict_types=1);
  *
  * STRATEGI (urutan prioritas):
  *  1. FTS5 MATCH  — jika tabel fts_* tersedia DAN $search >= 2 karakter.
- *                   Mendukung pencarian substring bebas (tengah/akhir kata).
- *  2. Prefix LIKE — jika FTS5 tidak tersedia tapi search >= 2 karakter.
- *                   Pakai 'kata%' (tanpa leading %) sehingga index bisa dipakai.
- *  3. Fallback '%kata%' — hanya jika $search < 2 karakter (biasanya tidak
- *                   pernah terjadi karena UI membatasi minimal 2 karakter).
+ *                   Mendukung pencarian substring bebas (tengah/akhir kata)
+ *                   dan kata "satuan menempel" seperti 1kg / m5: diperluas
+ *                   menjadi (raw OR pecahan batas digit-huruf) sehingga
+ *                   "1kg" juga cocok dengan data tersimpan "1 kg".
+ *  2. Prefix LIKE — jika FTS5 tidak tersedia, pakai substring '%kata%'
+ *                   termasuk varian "1 kg" hasil normalisasi batas digit-
+ *                   huruf, agar "1kg" maupun "kg" tetap bisa menemukan
+ *                   "1 kg".
+ *
+ * CATATAN FTS5 TOKENIZER:
+ * SQLite FTS5 default tokenizer (unicode61) memecah token hanya di
+ * non-alfanumerik: "1 kg" menjadi token [1, kg], sedangkan "1kg" menjadi
+ * satu token [1kg]. Karena itu pencarian menempel ("1kg") perlu bentuk
+ * terpecah ("1"+"kg") juga — dijembatani oleh split_alpha_num().
  *
  * CARA PAKAI:
  *
@@ -74,6 +83,10 @@ function fts5_escape(string $term): string
  * Jika multi-kata, setiap kata di-prefix dengan '*' dan digabung dengan AND implisit.
  * Contoh: "cat kecil" → '"cat" * "kecil" *' (prefix match setiap kata)
  *
+ * Kata "menempel" (1kg, m5) ditambah bentuk terpecah lewat OR sehingga
+ * cocok dengan token terpisah ("1 kg") maupun token menempel ("1kg"):
+ * "1kg" → `("1kg"* OR "1"* "kg"*)`.
+ *
  * Gunakan mode phrase '"kata lengkap"' agar tidak salah-match.
  */
 function fts5_build_match(string $search): string
@@ -84,7 +97,16 @@ function fts5_build_match(string $search): string
         return '""';
     }
     // Gunakan prefix match: setiap kata diakhiri * sehingga "cat" cocok "cat", "catatan", dll.
-    $parts = array_map(fn($w) => '"' . $w . '"*', $words);
+    $parts = [];
+    foreach ($words as $w) {
+        $raw   = '"' . $w . '"*';
+        $split = split_alpha_num($w);
+        if (count($split) > 1) {
+            $parts[] = '(' . $raw . ' OR ' . implode(' ', array_map(fn($s) => '"' . $s . '"*', $split)) . ')';
+        } else {
+            $parts[] = $raw;
+        }
+    }
     return implode(' ', $parts);
 }
 
@@ -94,6 +116,34 @@ function fts5_build_match(string $search): string
 function like_escape(string $term): string
 {
     return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $term);
+}
+
+/**
+ * Sisipkan spasi di setiap batas digit<->huruf ("1kg" -> "1 kg",
+ * "m5 x 8" -> "m 5 x 8"). Dipakai untuk varian pencarian yang juga
+ * cocok dengan data "menempel" (1kg) maupun "ber-spasi" (1 kg).
+ */
+function add_alpha_num_spaces(string $s): string
+{
+    return (string)preg_replace('/(?<=[0-9])(?=[a-zA-Z])|(?<=[a-zA-Z])(?=[0-9])/u', ' ', $s);
+}
+
+/**
+ * Pecah satu kata menjadi runtunan alfanumerik lalu sub-pecah setiap
+ * run di batas digit<->huruf. "1kg" -> ['1','kg']; "m5" -> ['m','5'];
+ * "1kg×2kg" -> ['1','kg','2','kg'] (pemisah non-alfanumerik diabaikan).
+ */
+function split_alpha_num(string $word): array
+{
+    $runs = preg_split('/[^0-9a-zA-Z]+/', $word, -1, PREG_SPLIT_NO_EMPTY);
+    $out  = [];
+    foreach ($runs as $run) {
+        $segs = preg_split('/(?<=[0-9])(?=[a-zA-Z])|(?<=[a-zA-Z])(?=[0-9])/u', $run);
+        foreach ($segs as $seg) {
+            if ($seg !== '') $out[] = $seg;
+        }
+    }
+    return $out;
 }
 
 // --------------------------------------------------------------------------
@@ -119,10 +169,11 @@ function fts_search_produk(string $search): array
         return [$sql, [$match], 'fts5'];
     }
 
-    // Prefix LIKE fallback
-    $esc = like_escape($search);
-    $sql = "p.nama LIKE ? ESCAPE '\\'";
-    return [$sql, [$esc . '%'], 'prefix'];
+    // Substring LIKE fallback (+ varian batas digit-huruf agar 1kg/temukan "1 kg")
+    $esc  = like_escape($search);
+    $escN = like_escape(add_alpha_num_spaces($search));
+    $sql  = "(p.nama LIKE ? ESCAPE '\\' OR p.nama LIKE ? ESCAPE '\\')";
+    return [$sql, ['%' . $esc . '%', '%' . $escN . '%'], 'like'];
 }
 
 /**
@@ -139,16 +190,20 @@ function fts_search_merek(string $search, ?int $idProduk = null): array
     if (fts5_available('fts_merek')) {
         $match = fts5_build_match($search);
         if ($idProduk !== null) {
-            $sql = "m.id IN (SELECT rowid FROM fts_merek WHERE fts_merek MATCH ? AND id_produk = ?)";
+            // CAST(id_produk AS INTEGER): binder array PDO mengikat int sbg teks ('27'),
+            // sedangkan kolom virtual menyimpan integer -> setarakan tipenya.
+            $sql = "m.id IN (SELECT rowid FROM fts_merek WHERE fts_merek MATCH ? AND CAST(id_produk AS INTEGER) = ?)";
             return [$sql, [$match, $idProduk], 'fts5'];
         }
         $sql = "m.id IN (SELECT rowid FROM fts_merek WHERE fts_merek MATCH ?)";
         return [$sql, [$match], 'fts5'];
     }
 
-    $esc = like_escape($search);
-    $sql = "m.merek LIKE ? ESCAPE '\\'";
-    return [$sql, [$esc . '%'], 'prefix'];
+    // Substring LIKE fallback (+ varian batas digit-huruf agar 1kg/temukan "1 kg")
+    $esc  = like_escape($search);
+    $escN = like_escape(add_alpha_num_spaces($search));
+    $sql  = "(m.merek LIKE ? ESCAPE '\\' OR m.merek LIKE ? ESCAPE '\\')";
+    return [$sql, ['%' . $esc . '%', '%' . $escN . '%'], 'like'];
 }
 
 /**
@@ -165,16 +220,20 @@ function fts_search_ukuran(string $search, ?int $idMerek = null): array
     if (fts5_available('fts_ukuran')) {
         $match = fts5_build_match($search);
         if ($idMerek !== null) {
-            $sql = "u.id IN (SELECT rowid FROM fts_ukuran WHERE fts_ukuran MATCH ? AND id_merek = ?)";
+            // CAST(id_merek AS INTEGER): binder array PDO mengikat int sbg teks ('9'),
+            // sedangkan kolom virtual menyimpan integer 9 -> harus disetarakan tipenya.
+            $sql = "u.id IN (SELECT rowid FROM fts_ukuran WHERE fts_ukuran MATCH ? AND CAST(id_merek AS INTEGER) = ?)";
             return [$sql, [$match, $idMerek], 'fts5'];
         }
         $sql = "u.id IN (SELECT rowid FROM fts_ukuran WHERE fts_ukuran MATCH ?)";
         return [$sql, [$match], 'fts5'];
     }
 
-    $esc = like_escape($search);
-    $sql = "u.ukuran LIKE ? ESCAPE '\\'";
-    return [$sql, [$esc . '%'], 'prefix'];
+    // Substring LIKE fallback (+ varian batas digit-huruf agar 1kg/temukan "1 kg")
+    $esc  = like_escape($search);
+    $escN = like_escape(add_alpha_num_spaces($search));
+    $sql  = "(u.ukuran LIKE ? ESCAPE '\\' OR u.ukuran LIKE ? ESCAPE '\\')";
+    return [$sql, ['%' . $esc . '%', '%' . $escN . '%'], 'like'];
 }
 
 /**

@@ -347,7 +347,7 @@ ob_start();
                                     <div class="w-11 h-11 rounded-lg bg-[#e1edfa] text-[#205295] flex items-center justify-center text-lg shrink-0"><i class="bi bi-rulers"></i></div>
                                     <div class="min-w-0 flex-1">
                                         <div class="font-medium"><?= e($u['ukuran']) ?></div>
-                                        <div class="text-xs text-[#5a6a7a]">Stok sistem: <span class="text-[#205295] font-medium"><?= format_number($u['stok'], 0) ?></span></div>
+                                        <div class="text-xs text-[#5a6a7a]">Stok sistem: <span class="text-[#205295] font-medium"><?= format_qty((float)$u['stok']) ?></span></div>
                                     </div>
                                     <?php if ($sudahDiKeranjang): ?>
                                         <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1a7a3a] text-white text-xs font-semibold"><i class="bi bi-check-lg"></i> Di keranjang</span>
@@ -393,7 +393,7 @@ ob_start();
                                 <div class="flex items-start justify-between gap-2 mb-2.5">
                                     <div class="min-w-0">
                                         <div class="text-[13px] font-semibold text-[#144272] leading-snug"><?= e($item['nama']) ?></div>
-                                        <div class="text-[11px] font-medium text-[#5a6a7a]">Stok sistem: <?= format_number($item['stokSistem'], 0) ?></div>
+                                        <div class="text-[11px] font-medium text-[#5a6a7a]">Stok sistem: <?= format_qty((float)$item['stokSistem']) ?></div>
                                     </div>
                                     <form method="POST" action="/verifikasi-stok/input" style="display:inline">
                                         <input type="hidden" name="action" value="hapus_keranjang">
@@ -407,8 +407,8 @@ ob_start();
                                         <form method="POST" action="/verifikasi-stok/input" style="display:inline">
                                             <input type="hidden" name="action" value="update_stok_fisik">
                                             <input type="hidden" name="ukuran_id" value="<?= $item['id'] ?>">
-                                            <input type="text" inputmode="decimal" name="stok_fisik"
-                                                   value="<?= format_number($item['stokFisik'], 0) ?>"
+                                            <input type="text" inputmode="decimal" data-qty name="stok_fisik"
+                                                   value="<?= format_qty((float)$item['stokFisik']) ?>"
                                                    data-stok-fisik-verifikasi data-sistem="<?= $item['stokSistem'] ?>" data-target="selisih-<?= $item['id'] ?>"
                                                    onchange="this.form.submit()"
                                                    class="w-full px-2 py-1.5 bg-white border border-[#c9cbd3] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2c74b3]">
@@ -416,11 +416,11 @@ ob_start();
                                     </div>
                                     <span data-selisih-verifikasi id="selisih-<?= $item['id'] ?>"
                                           class="px-2.5 py-1.5 rounded-lg text-xs font-semibold mb-0.5 whitespace-nowrap
-                                          <?= $item['selisih'] == 0 ? 'bg-[#dff5e4] text-[#1a7a3a]' : 'bg-[#fde8e8] text-[#c0392b]' ?>">
-                                        <?php if ($item['selisih'] == 0): ?>
+                                          <?= abs((float)$item['selisih']) <= 0.005 ? 'bg-[#dff5e4] text-[#1a7a3a]' : 'bg-[#fde8e8] text-[#c0392b]' ?>">
+                                        <?php if (abs((float)$item['selisih']) <= 0.005): ?>
                                             Sesuai
                                         <?php else: ?>
-                                            <?= $item['selisih'] > 0 ? '+' : '' ?><?= format_number($item['selisih'], 0) ?>
+                                            <?= $item['selisih'] > 0 ? '+' : '' ?><?= format_qty((float)$item['selisih']) ?>
                                         <?php endif; ?>
                                     </span>
                                 </div>
@@ -454,23 +454,32 @@ ob_start();
 </div>
 
 <script>
-document.addEventListener('input', function (e) {
-    const inp = e.target.closest('[data-stok-fisik-verifikasi]');
-    if (!inp) return;
+function recomputeSelisih(inp) {
     const sistem = parseFloat(inp.dataset.sistem) || 0;
-    const fisik = parseFloat(inp.value.replace(/[^\d.-]/g, '')) || 0;
-    const sel = fisik - sistem;
+    const fisik = window.parseQtyValue(inp.value);
     const el = document.getElementById(inp.dataset.target);
-    if (!el) return;
-    if (sel === 0) {
+    if (isNaN(fisik) || !el) return;
+    const sel = fisik - sistem;
+    if (Math.abs(sel) <= 0.005) {
         el.textContent = 'Sesuai';
         el.classList.remove('bg-[#fde8e8]', 'text-[#c0392b]');
         el.classList.add('bg-[#dff5e4]', 'text-[#1a7a3a]');
     } else {
-        el.textContent = (sel > 0 ? '+' : '') + sel.toLocaleString('id-ID', { minimumFractionDigits: 0 });
+        el.textContent = (sel > 0 ? '+' : '') + sel.toLocaleString('id-ID', { maximumFractionDigits: 2 });
         el.classList.remove('bg-[#dff5e4]', 'text-[#1a7a3a]');
         el.classList.add('bg-[#fde8e8]', 'text-[#c0392b]');
     }
+}
+
+document.addEventListener('input', function (e) {
+    const inp = e.target.closest('[data-stok-fisik-verifikasi]');
+    if (!inp) return;
+    setTimeout(function () { recomputeSelisih(inp); }, 0);
+});
+document.addEventListener('change', function (e) {
+    const inp = e.target.closest('[data-stok-fisik-verifikasi]');
+    if (!inp) return;
+    recomputeSelisih(inp);
 });
 </script>
 <?php

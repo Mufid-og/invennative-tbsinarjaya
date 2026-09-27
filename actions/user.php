@@ -115,7 +115,12 @@ if ($action === 'hapus') {
         redirect('/manajemen-user');
     }
 
-    db()->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
+    $stmt = db()->prepare('UPDATE users SET deleted_at = ?, updated_at = ?, remember_token = NULL WHERE id = ? AND deleted_at IS NULL');
+    $stmt->execute([now(), now(), $id]);
+    if ($stmt->rowCount() !== 1) {
+        set_flash('error', 'User tidak ditemukan.');
+        redirect('/manajemen-user');
+    }
 
     log_aktivitas('DELETE', 'user', $id, "User \"{$user['username']}\" dihapus", [
         'sebelum' => [

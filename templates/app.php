@@ -198,6 +198,96 @@ $fullUri = $_SERVER['REQUEST_URI'];
             if (hidden) hidden.value = vis.value.replace(/[^\d]/g, '').slice(0, 15);
         });
 
+        // ---- Format Qty (stok/berat) reusable: ribuan otomatis, desimal koma ----
+        // Ngetik angka tanpa menekan . / , → semua titik = ribuan (auto).
+        // Begitu user menekan . atau , → desimal (integer tetap dikelompokkan).
+        // Aturan akhir + parse: parse_qty() di includes/helpers.php.
+        window.parseQtyValue = function (s) {
+            var str = String(s == null ? '' : s).trim();
+            if (str === '' || str === '-') return NaN;
+            var neg = str.charAt(0) === '-';
+            if (neg) str = str.slice(1);
+            str = str.replace(/[^\d.,]/g, '');
+            var integer, fraction, ci = str.lastIndexOf(',');
+            if (ci !== -1) {
+                integer = str.slice(0, ci).replace(/\./g, '');
+                fraction = str.slice(ci + 1);
+            } else {
+                var di = str.lastIndexOf('.');
+                if (di !== -1) {
+                    if (str.length - di - 1 === 3) {
+                        integer = str.replace(/\./g, '');
+                        fraction = '';
+                    } else {
+                        integer = str.slice(0, di);
+                        fraction = str.slice(di + 1);
+                    }
+                } else {
+                    integer = str;
+                    fraction = '';
+                }
+            }
+            if (!/^\d*$/.test(integer) || !/^\d*$/.test(fraction)) return NaN;
+            var val = parseFloat((integer || '0') + '.' + (fraction || '0'));
+            return isNaN(val) ? NaN : (neg ? -val : val);
+        };
+
+        window.qtyFormat = function (s, sep) {
+            var str = String(s == null ? '' : s).replace(/[^\d.,-]/g, '');
+            if (str === '') return '';
+            var neg = str.charAt(0) === '-';
+            if (neg) str = str.slice(1);
+            if (str === '') return '-';
+            var ci = str.lastIndexOf(','), di = str.lastIndexOf('.');
+            var hasComma = ci !== -1, hasDot = di !== -1;
+            var dec;
+            if (sep && (sep.c || sep.d)) {
+                if (!hasComma && !hasDot) dec = false;
+                else if (hasComma) dec = true;
+                else dec = !!sep.d;
+            } else {
+                dec = hasComma || (hasDot && (str.length - di - 1) < 3);
+            }
+            var integer, fraction;
+            if (dec && hasComma) {
+                integer = str.slice(0, ci);
+                fraction = str.slice(ci + 1);
+            } else if (dec && hasDot) {
+                integer = str.slice(0, di);
+                fraction = str.slice(di + 1);
+            } else {
+                integer = str.replace(/[.,]/g, '');
+                fraction = '';
+            }
+            integer = integer.replace(/[^\d]/g, '');
+            fraction = fraction.replace(/[^\d]/g, '').slice(0, 2);
+            var shown = integer === '' ? '0' : Number(integer).toLocaleString('id-ID');
+            if (dec) shown += ',' + fraction;
+            return (neg ? '-' : '') + shown;
+        };
+
+        var __qtyStates = (typeof WeakMap !== 'undefined') ? new WeakMap() : null;
+
+        document.addEventListener('input', function (e) {
+            const inp = e.target.closest('input[data-qty]');
+            if (!inp) return;
+            if (__qtyStates && inp.value === '') {
+                __qtyStates.delete(inp);
+                return;
+            }
+            if (e.inputType === 'insertText' && e.data && e.data.length === 1 && (e.data === '.' || e.data === ',')) {
+                var st = (__qtyStates && __qtyStates.get(inp)) || { c: false, d: false };
+                if (e.data === ',') st.c = true; else st.d = true;
+                if (__qtyStates) __qtyStates.set(inp, st);
+            }
+            var st2 = (__qtyStates && __qtyStates.get(inp)) || null;
+            var formatted = window.qtyFormat(inp.value, st2);
+            if (formatted !== inp.value) {
+                inp.value = formatted;
+                if (__qtyStates && formatted === '') __qtyStates.delete(inp);
+            }
+        });
+
         document.addEventListener('click', function (e) {
             if (e.target.closest('[data-confirm]')) return;
             if (e.target.closest('button[type="submit"], input[type="submit"], form')) {

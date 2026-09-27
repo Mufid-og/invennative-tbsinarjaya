@@ -332,7 +332,7 @@ ob_start();
                                         </div>
                                         <div class="flex-1 min-w-0">
                                             <div class="font-semibold text-[#1a2332] text-sm truncate" title="Ukuran <?= e($u['ukuran']) ?>">Ukuran <?= e($u['ukuran']) ?></div>
-                                            <div class="text-[11px] text-[#5a6a7a]">Stok: <?= format_number($u['stok'], 0) ?></div>
+                                            <div class="text-[11px] text-[#5a6a7a]">Stok: <?= format_qty((float)$u['stok']) ?></div>
                                         </div>
                                         <?php if (!$inCart): ?>
                                             <form method="POST" action="/mutasi-stok/input">
@@ -416,7 +416,7 @@ ob_start();
                                             <div class="flex items-start justify-between gap-2 mb-2">
                                                 <div class="min-w-0">
                                                     <div class="text-[13px] font-semibold text-[#144272] leading-snug"><?= e($itemDetail['produk_nama']) ?> — <?= e($itemDetail['merek']) ?> — <?= e($itemDetail['ukuran']) ?></div>
-                                                    <div class="text-[11px] font-medium text-[#5a6a7a]">Stok: <?= format_number($itemDetail['stok'], 0) ?></div>
+                                                    <div class="text-[11px] font-medium text-[#5a6a7a]">Stok: <?= format_qty((float)$itemDetail['stok']) ?></div>
                                                 </div>
                                                 <div class="flex-shrink-0">
                                                     <button type="submit" form="formHapusKeranjang_<?= $ukId ?>" class="text-[#c0392b] hover:text-[#a02820] cursor-pointer shrink-0 transition" title="Hapus">
@@ -424,13 +424,13 @@ ob_start();
                                                     </button>
                                                 </div>
                                             </div>
-                                            <div class="grid grid-cols-4 gap-2 items-end">
-                                                <div class="col-span-1">
+                                            <div class="flex gap-2 items-end">
+                                                <div class="flex-1">
                                                     <label class="block text-[10px] text-[#5a6a7a] mb-0.5">Qty</label>
-                                                    <input type="number" name="qty_<?= $ukId ?>" value="<?= e((string)(int)$item['qty']) ?>" min="0"
+                                                    <input type="text" inputmode="decimal" data-qty name="qty_<?= $ukId ?>" value="<?= e(format_qty((float)$item['qty'])) ?>"
                                                         class="w-full px-2 py-1.5 text-[13px] text-center border border-[#dce3ed] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#205295]/20 focus:border-[#205295] cart-qty" data-ukid="<?= $ukId ?>">
                                                 </div>
-                                                <div class="col-span-3">
+                                                <div class="flex-1">
                                                     <label class="block text-[10px] text-[#5a6a7a] mb-0.5">Harga Modal</label>
                                                     <div class="relative">
                                                         <input type="text" inputmode="numeric" data-rupiah
@@ -506,10 +506,6 @@ ob_start();
         if (<?= json_encode($jenis) ?>) {
             try {
                 var draft = JSON.parse(localStorage.getItem(key) || '{}');
-                if (draft.tanggal) {
-                    var tglInput = document.querySelector('input[name="tanggal"]');
-                    if (tglInput) tglInput.value = draft.tanggal;
-                }
                 if (draft.keterangan) {
                     var ketInput = document.querySelector('textarea[name="keterangan"]');
                     if (ketInput) ketInput.value = draft.keterangan;
@@ -519,28 +515,22 @@ ob_start();
 
         document.querySelectorAll('.cart-qty').forEach(function(input) {
             input.addEventListener('change', function() {
-                var ukid = this.getAttribute('data-ukid');
-                var val = parseInt(this.value) || 0;
-                if (val < 0) this.value = 0;
-                document.querySelectorAll('.cart-qty').forEach(function(qi) {
-                    qi.addEventListener('input', saveDraft);
-                });
+                var val = window.parseQtyValue(this.value);
+                if (isNaN(val) || val < 0) this.value = '0';
             });
         });
 
         function saveDraft() {
             if (!<?= json_encode($jenis) ?>) return;
-            var draft = {};
-            var tgl = document.querySelector('input[name="tanggal"]');
             var ket = document.querySelector('textarea[name="keterangan"]');
-            if (tgl) draft.tanggal = tgl.value;
-            if (ket) draft.keterangan = ket.value;
-            try {
-                localStorage.setItem(key, JSON.stringify(draft));
-            } catch (e) {}
+            if (ket) {
+                try {
+                    localStorage.setItem(key, JSON.stringify({ keterangan: ket.value }));
+                } catch (e) {}
+            }
         }
 
-        document.querySelectorAll('input[name="tanggal"], textarea[name="keterangan"]').forEach(function(el) {
+        document.querySelectorAll('textarea[name="keterangan"]').forEach(function(el) {
             el.addEventListener('input', saveDraft);
             el.addEventListener('change', saveDraft);
         });

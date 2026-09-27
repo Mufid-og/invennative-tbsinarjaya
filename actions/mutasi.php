@@ -163,22 +163,23 @@ switch ($action) {
         // Validasi qty & stok, bangun $validatedItems
         $validatedItems = [];
         foreach ($keranjang as $ukId => $item) {
-            $qty        = (int)($_POST['qty_' . $ukId] ?? $item['qty'] ?? 0);
+            $qty        = parse_qty((string)($_POST['qty_' . $ukId] ?? $item['qty'] ?? 0));
             $hargaModal = (float)($_POST['harga_modal_raw_' . $ukId] ?? $item['hargaModal'] ?? 0);
             $hargaJual  = (float)($_POST['harga_jual_raw_' . $ukId] ?? $item['hargaJual'] ?? 0);
 
-            if ($qty <= 0) {
+            if ($qty === null || $qty <= 0) {
                 set_flash('error', 'Qty harus lebih dari 0 untuk setiap item.');
                 redirect('/mutasi-stok/input?step=ukuran');
             }
+            $qty = round($qty, 2);
 
             $ukuran = $ukuranMap[(int)$ukId]; // O(1) lookup, tidak ada query
 
             if ($jenis === 'keluar' && $ukuran['stok'] < $qty) {
                 set_flash('error',
                     'Stok ' . $ukuran['produk_nama'] . ' (' . $ukuran['merek'] . ' / ' . $ukuran['ukuran'] . ')'
-                    . ' tidak cukup. Stok tersedia: ' . format_number($ukuran['stok'], 0)
-                    . ', diminta: ' . $qty . '.'
+                    . ' tidak cukup. Stok tersedia: ' . format_qty((float)$ukuran['stok'])
+                    . ', diminta: ' . format_qty($qty) . '.'
                 );
                 redirect('/mutasi-stok/input?step=ukuran');
             }
@@ -293,7 +294,7 @@ switch ($action) {
                 $mutasiId    = $firstInsertedId + $idx;
                 $namaLengkap = $vi['ukuran']['produk_nama'] . ' ' . $vi['ukuran']['merek'] . ' ' . $vi['ukuran']['ukuran'];
                 log_aktivitas('CREATE', 'mutasi-stok', $mutasiId,
-                    'Mutasi stok ' . $jenis . ': ' . $namaLengkap . ' x' . $vi['qty'],
+                    'Mutasi stok ' . $jenis . ': ' . $namaLengkap . ' x' . format_qty((float)$vi['qty']),
                     [
                         'produk'      => $vi['ukuran']['produk_nama'],
                         'merek'       => $vi['ukuran']['merek'],
@@ -385,7 +386,7 @@ switch ($action) {
 
         $namaLengkap = $mutasi['produk_nama'] . ' ' . $mutasi['merek'] . ' ' . $mutasi['nama_ukuran'];
         log_aktivitas('DELETE', 'mutasi-stok', $id,
-            'Mutasi stok ' . $mutasi['jenis'] . ' dihapus: ' . $namaLengkap . ' x' . $mutasi['qty'] . ' (stok dikembalikan)',
+            'Mutasi stok ' . $mutasi['jenis'] . ' dihapus: ' . $namaLengkap . ' x' . format_qty((float)$mutasi['qty']) . ' (stok dikembalikan)',
             [
                 'produk' => $mutasi['produk_nama'],
                 'merek'  => $mutasi['merek'],
